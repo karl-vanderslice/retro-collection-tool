@@ -253,8 +253,9 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 }
 
 type hacksFlags struct {
-	systemsCSV string
-	allSystems bool
+	systemsCSV   string
+	allSystems   bool
+	noMoveRetail bool
 }
 
 func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, args []string) error {
@@ -263,6 +264,7 @@ func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g gl
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&hf.systemsCSV, "systems", "", "comma-separated system slugs")
 	fs.BoolVar(&hf.allSystems, "all-systems", false, "run all enabled systems")
+	fs.BoolVar(&hf.noMoveRetail, "no-move-retail", false, "do not move matching retail ROM files into game folders")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -276,14 +278,14 @@ func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g gl
 	}
 
 	for _, system := range systems {
-		if err := runHacksSystem(ctx, cfg, runner, g, system); err != nil {
+		if err := runHacksSystem(ctx, cfg, runner, g, system, !hf.noMoveRetail); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, system string) error {
+func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, system string, moveRetail bool) error {
 	sysCfg := cfg.Systems[system]
 	systemHacksDir := filepath.Join(cfg.ResolvePath(cfg.Paths.HacksSource), system)
 	if _, statErr := os.Stat(systemHacksDir); os.IsNotExist(statErr) {
@@ -359,8 +361,12 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 				return err
 			}
 			fmt.Printf("[dry-run] target hack path %s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
-			if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
-				return err
+			if moveRetail {
+				if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
+					return err
+				}
+			} else {
+				fmt.Println("[dry-run] retail move disabled (--no-move-retail)")
 			}
 			fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
 			continue
@@ -386,8 +392,12 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return err
 		}
 
-		if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, false, g.verbose); err != nil {
-			return err
+		if moveRetail {
+			if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, false, g.verbose); err != nil {
+				return err
+			}
+		} else if g.verbose {
+			fmt.Println("[hacks] retail move disabled (--no-move-retail)")
 		}
 	}
 	return nil

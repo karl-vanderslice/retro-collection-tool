@@ -23,7 +23,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 ## Commands
 
 - `sync --systems <csv> | --all-systems [--compress]`
-- `hacks --systems <csv> | --all-systems`
+- `hacks --systems <csv> | --all-systems [--no-move-retail]`
 - `clean --systems <csv> | --all-systems [--include-bios]`
 - `export --systems <csv> | --all-systems --destination <path>`
 - `cache clean|path`

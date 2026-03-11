@@ -13,6 +13,9 @@ Example:
 
 Applies curated patches from `roms/Hacks/<system>/<hack-name>/`.
 
+Safety flag:
+`--no-move-retail` keeps retail ROM files in place and only writes hack outputs.
+
 With global `--dry-run`, this command prints planned Igir patch invocations without writing files.
 
 Hacks are now organized under the matched game directory when possible:

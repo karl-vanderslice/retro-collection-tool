@@ -14,11 +14,11 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 
 1. Enter dev shell: `direnv allow` or run commands via `nix develop path:. -c ...`.
 2. Build: `nix develop path:. -c make build`.
-3. Inspect systems: `bin/retro-collection-tool --config config/retro-collection-tool.yaml systems`.
+3. Inspect systems: `bin/retro-collection-tool systems`.
 4. Bootstrap directories (safe create-only):
-   `bin/retro-collection-tool --config config/retro-collection-tool.yaml bootstrap`
+   `bin/retro-collection-tool bootstrap`
 5. Dry-run sync:
-   `bin/retro-collection-tool --config config/retro-collection-tool.yaml --dry-run sync --systems nes,snes,genesis,sms`
+   `bin/retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
 ## Commands
 
@@ -36,10 +36,21 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 
 Default config: `config/retro-collection-tool.yaml`
 
+Config discovery order (Terraform/Vault-style):
+
+1. `--config <path>`
+2. `RETRO_COLLECTION_TOOL_CONFIG`
+3. `./retro-collection-tool.yaml`
+4. `./.retro-collection-tool.yaml`
+5. `./config/retro-collection-tool.yaml`
+6. `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml` (or `~/.config/...` fallback)
+
 - `root` points at the RetroLibrary root.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
 - Default enabled systems: `nes`, `snes`, `genesis`, `sms`.
+
+If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool`.
 
 See `docs/configuration.md` for details.
 

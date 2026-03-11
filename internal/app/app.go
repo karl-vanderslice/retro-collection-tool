@@ -16,9 +16,13 @@ import (
 	"github.com/karl-vanderslice/retro-collection-tool/internal/fsutil"
 	"github.com/karl-vanderslice/retro-collection-tool/internal/igir"
 	"github.com/karl-vanderslice/retro-collection-tool/internal/platform"
+	"github.com/karl-vanderslice/retro-collection-tool/internal/xdg"
 )
 
-const defaultConfigPath = "config/retro-collection-tool.yaml"
+const (
+	configEnvVar = "RETRO_COLLECTION_TOOL_CONFIG"
+	appName      = "retro-collection-tool"
+)
 
 type globalFlags struct {
 	configPath string
@@ -41,9 +45,17 @@ func Run(args []string) error {
 		return errors.New("no command provided")
 	}
 
-	cfg, err := config.Load(globals.configPath)
+	configPath, err := resolveConfigPath(globals.configPath)
 	if err != nil {
 		return err
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load config %s: %w", configPath, err)
+	}
+	if globals.verbose {
+		fmt.Printf("[config] using %s\n", configPath)
 	}
 
 	ctx := context.Background()
@@ -85,7 +97,7 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	var g globalFlags
 	fs := flag.NewFlagSet("retro-collection-tool", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.StringVar(&g.configPath, "config", defaultConfigPath, "path to YAML config")
+	fs.StringVar(&g.configPath, "config", "", "path to YAML config (default discovery: cwd then XDG)")
 	fs.BoolVar(&g.dryRun, "dry-run", false, "print planned actions without making changes")
 	fs.BoolVar(&g.verbose, "verbose", false, "verbose logs")
 
@@ -93,6 +105,50 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 		return g, nil, err
 	}
 	return g, fs.Args(), nil
+}
+
+func resolveConfigPath(flagPath string) (string, error) {
+	if p := strings.TrimSpace(flagPath); p != "" {
+		return p, nil
+	}
+	if p := strings.TrimSpace(os.Getenv(configEnvVar)); p != "" {
+		return p, nil
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get cwd: %w", err)
+	}
+
+	candidates := []string{
+		filepath.Join(cwd, "retro-collection-tool.yaml"),
+		filepath.Join(cwd, ".retro-collection-tool.yaml"),
+		filepath.Join(cwd, "config", "retro-collection-tool.yaml"),
+	}
+
+	if configHome := xdg.ConfigHome(); configHome != "" {
+		candidates = append(candidates,
+			filepath.Join(configHome, appName, "config.yaml"),
+			filepath.Join(configHome, appName, "config.yml"),
+			filepath.Join(configHome, appName, "retro-collection-tool.yaml"),
+		)
+	}
+
+	for _, c := range candidates {
+		if fileExists(c) {
+			return c, nil
+		}
+	}
+
+	return "", fmt.Errorf("no config found; set --config or %s (searched: %s)", configEnvVar, strings.Join(candidates, ", "))
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
 }
 
 type syncFlags struct {
@@ -138,7 +194,7 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 		return err
 	}
 
-	cachePath := filepath.Join(cfg.ResolvePath(cfg.CacheDir), cfg.Igir.CacheRetailFile)
+	cachePath := filepath.Join(resolveCacheRoot(cfg), cfg.Igir.CacheRetailFile)
 	if err := fsutil.EnsureDir(filepath.Dir(cachePath)); err != nil {
 		return err
 	}
@@ -250,7 +306,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 		hackName := entry.Name()
 		hackPath := filepath.Join(systemHacksDir, hackName)
 
-		workRoot := filepath.Join(cfg.ResolvePath(cfg.CacheDir), "work", system, sanitizeName(hackName))
+		workRoot := filepath.Join(resolveCacheRoot(cfg), "work", system, sanitizeName(hackName))
 		inDir := filepath.Join(workRoot, "in")
 		patchDir := filepath.Join(workRoot, "patch")
 		outDir := filepath.Join(workRoot, "out")
@@ -272,7 +328,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return err
 		}
 
-		cachePath := filepath.Join(cfg.ResolvePath(cfg.CacheDir), cfg.Igir.CacheHacksFile)
+		cachePath := filepath.Join(resolveCacheRoot(cfg), cfg.Igir.CacheHacksFile)
 		args := []string{
 			"copy",
 			"--dat", datPath,
@@ -469,6 +525,9 @@ func runCache(cfg *config.Config, args []string) error {
 		return errors.New("cache requires subcommand: clean|path")
 	}
 	cacheRoot := cfg.ResolvePath(cfg.CacheDir)
+	if strings.TrimSpace(cfg.CacheDir) == "" {
+		cacheRoot = resolveCacheRoot(cfg)
+	}
 	switch args[0] {
 	case "clean":
 		return fsutil.RemoveIfExists(cacheRoot)
@@ -582,7 +641,7 @@ Usage:
   retro-collection-tool [global flags] <command> [command flags]
 
 Global flags:
-  --config <path>       YAML config path (default: config/retro-collection-tool.yaml)
+	--config <path>       YAML config path (default discovery via cwd, then XDG)
   --dry-run             Plan-only mode
   --verbose             Verbose output
 
@@ -597,4 +656,14 @@ Commands:
   bootstrap   Create expected directory structure
   systems     List enabled systems
   version     Print version`) //nolint:lll
+}
+
+func resolveCacheRoot(cfg *config.Config) string {
+	if strings.TrimSpace(cfg.CacheDir) != "" {
+		return cfg.ResolvePath(cfg.CacheDir)
+	}
+	if cacheHome := xdg.CacheHome(); cacheHome != "" {
+		return filepath.Join(cacheHome, appName)
+	}
+	return filepath.Join(os.TempDir(), appName)
 }

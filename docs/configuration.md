@@ -2,10 +2,25 @@
 
 Primary config file: `config/retro-collection-tool.yaml`
 
+Config discovery order:
+
+1. `--config <path>`
+2. `RETRO_COLLECTION_TOOL_CONFIG`
+3. `./retro-collection-tool.yaml`
+4. `./.retro-collection-tool.yaml`
+5. `./config/retro-collection-tool.yaml`
+6. `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
+7. `$XDG_CONFIG_HOME/retro-collection-tool/config.yml`
+8. `$XDG_CONFIG_HOME/retro-collection-tool/retro-collection-tool.yaml`
+
+When `XDG_CONFIG_HOME` is unset, `~/.config` is used.
+
 ## Core
 
 - `root`: absolute path to RetroLibrary root.
-- `cache_dir`: cache directory relative to root.
+- `cache_dir`: cache directory relative to root, absolute path, or omitted.
+
+If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool` (or `~/.cache/retro-collection-tool`).
 
 ## Igir
 

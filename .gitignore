@@ -1,0 +1,11 @@
+bin/
+dist/
+result/
+.direnv/
+.cache/
+*.log
+*.tmp
+*.swp
+*.swo
+coverage.out
+site/

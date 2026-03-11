@@ -1,0 +1,15 @@
+site_name: retro-collection-tool
+site_description: Igir wrapper for curated ROMM libraries
+site_url: https://example.invalid/retro-collection-tool
+repo_name: karl-vanderslice/retro-collection-tool
+repo_url: https://github.com/karl-vanderslice/retro-collection-tool
+
+theme:
+  name: mkdocs
+
+nav:
+  - Home: docs/index.md
+  - Configuration: docs/configuration.md
+  - Commands: docs/commands.md
+  - Architecture: docs/architecture.md
+  - TODO: docs/todo.md

@@ -1,0 +1,530 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
+	"github.com/karl-vanderslice/retro-collection-tool/internal/fsutil"
+	"github.com/karl-vanderslice/retro-collection-tool/internal/igir"
+	"github.com/karl-vanderslice/retro-collection-tool/internal/platform"
+)
+
+const defaultConfigPath = "config/retro-collection-tool.yaml"
+
+type globalFlags struct {
+	configPath string
+	dryRun     bool
+	verbose    bool
+}
+
+func Run(args []string) error {
+	if len(args) == 0 {
+		printRootUsage()
+		return errors.New("no command provided")
+	}
+
+	globals, rest, err := parseGlobalFlags(args)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 0 {
+		printRootUsage()
+		return errors.New("no command provided")
+	}
+
+	cfg, err := config.Load(globals.configPath)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	command := rest[0]
+	runner := igir.NewRunner(cfg)
+
+	switch command {
+	case "sync":
+		return runSync(ctx, cfg, runner, globals, rest[1:])
+	case "hacks":
+		return runHacks(ctx, cfg, runner, globals, rest[1:])
+	case "bios":
+		return runBiosStub(cfg)
+	case "redump":
+		return runRedumpStub(cfg)
+	case "arcade":
+		return runArcadeStub(cfg)
+	case "cache":
+		return runCache(cfg, rest[1:])
+	case "export":
+		return runExport(cfg, globals, rest[1:])
+	case "bootstrap":
+		return runBootstrap(cfg)
+	case "systems":
+		return runSystems(cfg)
+	case "version":
+		fmt.Println("retro-collection-tool dev")
+		return nil
+	case "help", "-h", "--help":
+		printRootUsage()
+		return nil
+	default:
+		printRootUsage()
+		return fmt.Errorf("unknown command: %s", command)
+	}
+}
+
+func parseGlobalFlags(args []string) (globalFlags, []string, error) {
+	var g globalFlags
+	fs := flag.NewFlagSet("retro-collection-tool", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&g.configPath, "config", defaultConfigPath, "path to YAML config")
+	fs.BoolVar(&g.dryRun, "dry-run", false, "print planned actions without making changes")
+	fs.BoolVar(&g.verbose, "verbose", false, "verbose logs")
+
+	if err := fs.Parse(args); err != nil {
+		return g, nil, err
+	}
+	return g, fs.Args(), nil
+}
+
+type syncFlags struct {
+	systemsCSV string
+	allSystems bool
+	compress   bool
+}
+
+func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, args []string) error {
+	var sf syncFlags
+	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&sf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.BoolVar(&sf.allSystems, "all-systems", false, "run all enabled systems")
+	fs.BoolVar(&sf.compress, "compress", false, "enable zip output if configured")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	systems, err := platform.ExpandSystems([]string{sf.systemsCSV}, sf.allSystems, cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, system := range systems {
+		if err := syncRetailSystem(ctx, cfg, runner, g, system, sf.compress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, system string, compress bool) error {
+	sysCfg := cfg.Systems[system]
+	rommDir := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
+	if err := fsutil.EnsureDir(rommDir); err != nil {
+		return err
+	}
+
+	datDir := cfg.ResolvePath(cfg.Paths.DatsNoIntro1G1R)
+	datPath, err := fsutil.FindLatestDAT(datDir, sysCfg.RetailDatPattern)
+	if err != nil {
+		return err
+	}
+
+	cachePath := filepath.Join(cfg.ResolvePath(cfg.CacheDir), cfg.Igir.CacheRetailFile)
+	if err := fsutil.EnsureDir(filepath.Dir(cachePath)); err != nil {
+		return err
+	}
+
+	args := []string{"link", "playlist", "clean", "--dat", datPath}
+	args = append(args,
+		"--input", cfg.ResolvePath(cfg.Paths.VaultNoIntro),
+		"--input", rommDir,
+		"--output", rommDir,
+		"--clean-exclude", "hack/**",
+		"--link-mode", "hardlink",
+		"--single",
+		"--only-retail",
+		"--no-bios",
+		"--no-unlicensed",
+		"--no-homebrew",
+		"--no-aftermarket",
+		"--no-program",
+		"--prefer-parent",
+		"--prefer-region", strings.Join(cfg.Igir.PreferRegion, ","),
+		"--prefer-language", strings.Join(cfg.Igir.PreferLanguage, ","),
+		"--merge-discs",
+		"--overwrite-invalid",
+		"--input-checksum-min", cfg.Igir.InputChecksumMin,
+		"--cache-path", cachePath,
+	)
+
+	for _, a := range cfg.Igir.RetailBaseArgs {
+		if strings.TrimSpace(a) != "" {
+			args = append(args, a)
+		}
+	}
+
+	if compress {
+		if !cfg.Igir.AllowCompressionZip {
+			return errors.New("compression requested but config.igir.allow_compression_zip is false")
+		}
+		args = append(args, "--zip")
+	}
+	if g.dryRun {
+		args = append(args, "--dry-run")
+	}
+
+	if g.verbose {
+		fmt.Printf("[sync:%s] dat=%s output=%s\n", system, datPath, rommDir)
+	}
+	return runner.Run(ctx, args)
+}
+
+type hacksFlags struct {
+	systemsCSV string
+	allSystems bool
+}
+
+func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, args []string) error {
+	var hf hacksFlags
+	fs := flag.NewFlagSet("hacks", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&hf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.BoolVar(&hf.allSystems, "all-systems", false, "run all enabled systems")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	systems, err := platform.ExpandSystems([]string{hf.systemsCSV}, hf.allSystems, cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, system := range systems {
+		if err := runHacksSystem(ctx, cfg, runner, g, system); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, system string) error {
+	sysCfg := cfg.Systems[system]
+	systemHacksDir := filepath.Join(cfg.ResolvePath(cfg.Paths.HacksSource), system)
+	if _, statErr := os.Stat(systemHacksDir); os.IsNotExist(statErr) {
+		if g.verbose {
+			fmt.Printf("[hacks:%s] no hacks directory, skipping\n", system)
+		}
+		return nil
+	} else if statErr != nil {
+		return statErr
+	}
+
+	baseOutput := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
+	if err := fsutil.EnsureDir(baseOutput); err != nil {
+		return err
+	}
+
+	datPath, err := fsutil.FindLatestDAT(cfg.ResolvePath(cfg.Paths.DatsNoIntroRaw), sysCfg.HackDatPattern)
+	if err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(systemHacksDir)
+	if err != nil {
+		return fmt.Errorf("read hacks dir %s: %w", systemHacksDir, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		hackName := entry.Name()
+		hackPath := filepath.Join(systemHacksDir, hackName)
+
+		workRoot := filepath.Join(cfg.ResolvePath(cfg.CacheDir), "work", system, sanitizeName(hackName))
+		inDir := filepath.Join(workRoot, "in")
+		patchDir := filepath.Join(workRoot, "patch")
+		outDir := filepath.Join(workRoot, "out")
+
+		if err := fsutil.RemoveIfExists(workRoot); err != nil {
+			return err
+		}
+		if err := fsutil.EnsureDir(inDir); err != nil {
+			return err
+		}
+		if err := fsutil.EnsureDir(patchDir); err != nil {
+			return err
+		}
+		if err := fsutil.EnsureDir(outDir); err != nil {
+			return err
+		}
+
+		if err := stageHackFiles(hackPath, inDir, patchDir); err != nil {
+			return err
+		}
+
+		cachePath := filepath.Join(cfg.ResolvePath(cfg.CacheDir), cfg.Igir.CacheHacksFile)
+		args := []string{
+			"copy",
+			"--dat", datPath,
+			"--input", inDir,
+			"--patch", patchDir,
+			"--output", outDir,
+			"--patch-only",
+			"--overwrite-invalid",
+			"--cache-path", cachePath,
+		}
+		if g.dryRun {
+			args = append(args, "--dry-run")
+		}
+
+		if g.verbose {
+			fmt.Printf("[hacks:%s] processing %s with dat=%s\n", system, hackName, datPath)
+		}
+		if err := runner.Run(ctx, args); err != nil {
+			return err
+		}
+		if g.dryRun {
+			continue
+		}
+
+		patched, err := firstFileInDir(outDir)
+		if err != nil {
+			return fmt.Errorf("hack %s produced no output: %w", hackName, err)
+		}
+
+		ext := filepath.Ext(patched)
+		targetDir := filepath.Join(baseOutput, sanitizeName(hackName), "hack")
+		targetFile := filepath.Join(targetDir, sanitizeName(hackName)+ext)
+		if err := fsutil.CopyFile(patched, targetFile); err != nil {
+			return err
+		}
+
+		// Try to place an unaltered ROM alongside the hack if a base ROM was staged.
+		baseROM, err := firstROMInDir(inDir)
+		if err == nil {
+			baseDst := filepath.Join(baseOutput, sanitizeName(hackName), filepath.Base(baseROM))
+			if err := fsutil.LinkOrCopy(baseROM, baseDst); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func stageHackFiles(srcDir, inDir, patchDir string) error {
+	return fsutil.WalkFiles(srcDir, func(path string, _ os.DirEntry) error {
+		ext := strings.ToLower(filepath.Ext(path))
+		switch ext {
+		case ".ips", ".bps", ".ups", ".xdelta":
+			return fsutil.CopyFile(path, filepath.Join(patchDir, filepath.Base(path)))
+		default:
+			return fsutil.CopyFile(path, filepath.Join(inDir, filepath.Base(path)))
+		}
+	})
+}
+
+func firstFileInDir(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		return filepath.Join(dir, e.Name()), nil
+	}
+	return "", errors.New("no file found")
+}
+
+func firstROMInDir(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		switch ext {
+		case ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".sms", ".md", ".gen", ".pce", ".bin", ".chd", ".cue", ".iso":
+			return filepath.Join(dir, e.Name()), nil
+		}
+	}
+	return "", errors.New("no base ROM found")
+}
+
+func sanitizeName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	if name == "" {
+		return "unnamed"
+	}
+	return name
+}
+
+func runBiosStub(cfg *config.Config) error {
+	if !cfg.Features.EnableBios {
+		return errors.New("bios workflow disabled in config.features.enable_bios")
+	}
+	return errors.New("bios workflow is stubbed; implementation planned in next phase")
+}
+
+func runRedumpStub(cfg *config.Config) error {
+	if !cfg.Features.EnableRedump {
+		return errors.New("redump workflow disabled in config.features.enable_redump")
+	}
+	return errors.New("redump workflow is stubbed; implementation planned in next phase")
+}
+
+func runArcadeStub(cfg *config.Config) error {
+	if !cfg.Features.EnableArcade {
+		return errors.New("arcade workflow disabled in config.features.enable_arcade")
+	}
+	return errors.New("arcade workflow is stubbed; implementation planned in next phase")
+}
+
+func runCache(cfg *config.Config, args []string) error {
+	if len(args) == 0 {
+		return errors.New("cache requires subcommand: clean|path")
+	}
+	cacheRoot := cfg.ResolvePath(cfg.CacheDir)
+	switch args[0] {
+	case "clean":
+		return fsutil.RemoveIfExists(cacheRoot)
+	case "path":
+		fmt.Println(cacheRoot)
+		return nil
+	default:
+		return fmt.Errorf("unknown cache subcommand: %s", args[0])
+	}
+}
+
+func runExport(cfg *config.Config, g globalFlags, args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	systemsCSV := fs.String("systems", "", "comma-separated system slugs")
+	allSystems := fs.Bool("all-systems", false, "export all enabled systems")
+	destination := fs.String("destination", "", "destination root path (e.g., mounted SD card)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*destination) == "" {
+		return errors.New("export requires --destination")
+	}
+
+	systems, err := platform.ExpandSystems([]string{*systemsCSV}, *allSystems, cfg)
+	if err != nil {
+		return err
+	}
+
+	dstRoot := filepath.Clean(*destination)
+	for _, s := range systems {
+		sysCfg := cfg.Systems[s]
+		src := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
+		dst := filepath.Join(dstRoot, sysCfg.RommSlug)
+
+		if g.dryRun {
+			fmt.Printf("[dry-run] export %s -> %s\n", src, dst)
+			continue
+		}
+		if err := copyDirRecursive(src, dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyDirRecursive(src, dst string) error {
+	if err := fsutil.EnsureDir(dst); err != nil {
+		return err
+	}
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return fsutil.EnsureDir(target)
+		}
+		return fsutil.CopyFile(path, target)
+	})
+}
+
+func runBootstrap(cfg *config.Config) error {
+	dirs := []string{
+		cfg.ResolvePath(cfg.Paths.RommLibraryRoms),
+		cfg.ResolvePath(cfg.Paths.RommLibraryBios),
+		cfg.ResolvePath(cfg.Paths.HacksSource),
+		cfg.ResolvePath(cfg.Paths.ToSort),
+		cfg.ResolvePath(cfg.Paths.VaultNoIntro),
+		cfg.ResolvePath(cfg.CacheDir),
+	}
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		if err := fsutil.EnsureDir(d); err != nil {
+			return err
+		}
+	}
+
+	for _, slug := range cfg.Bootstrap.RommRoms {
+		if err := fsutil.EnsureDir(filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), slug)); err != nil {
+			return err
+		}
+	}
+	for _, slug := range cfg.Bootstrap.RommBios {
+		if err := fsutil.EnsureDir(filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), slug)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runSystems(cfg *config.Config) error {
+	enabled := cfg.EnabledSystems()
+	sort.Strings(enabled)
+	for _, s := range enabled {
+		fmt.Println(s)
+	}
+	return nil
+}
+
+func printRootUsage() {
+	fmt.Println(`retro-collection-tool: Igir workflow wrapper for ROMM
+
+Usage:
+  retro-collection-tool [global flags] <command> [command flags]
+
+Global flags:
+  --config <path>       YAML config path (default: config/retro-collection-tool.yaml)
+  --dry-run             Plan-only mode
+  --verbose             Verbose output
+
+Commands:
+  sync        Run retail sync with Igir
+  hacks       Run curated ROM hacks patch workflow
+  bios        BIOS workflow (stub)
+  redump      ReDump workflow (stub)
+  arcade      Arcade workflow (stub)
+  export      Copy selected ROMM systems to destination (e.g., SD card)
+  cache       Cache controls: clean|path
+  bootstrap   Create expected directory structure
+  systems     List enabled systems
+  version     Print version`) //nolint:lll
+}

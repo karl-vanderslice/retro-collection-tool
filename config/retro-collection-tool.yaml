@@ -1,0 +1,56 @@
+root: /mnt/media-emulation/RetroLibrary
+cache_dir: cache
+
+igir:
+  binary: igir
+  use_npx_fallback: true
+  prefer_region: ["USA", "JPN", "WORLD", "EUR"]
+  prefer_language: ["EN", "JA"]
+  input_checksum_min: CRC32
+  cache_retail_file: igir_retail.cache
+  cache_hacks_file: igir_hacks.cache
+  allow_compression_zip: true
+  retail_base_args: []
+
+paths:
+  vault_no_intro: roms/Vault/NoIntro/NoIntro
+  vault_redump: roms/Vault/ReDump/ReDump
+  to_sort: roms/ToSort
+  romm_library_roms: roms/Library/roms
+  romm_library_bios: roms/Library/bios
+  hacks_source: roms/Hacks
+  dats_no_intro_1g1r: dats/Fresh1G1R/PropeR-No-Intro
+  dats_no_intro_raw: dats/NoIntro/NoIntro/No-Intro
+  dats_redump_1g1r: dats/Fresh1G1R/PropeR-Redump
+  media_root: media
+
+features:
+  enable_bios: false
+  enable_redump: false
+  enable_arcade: false
+
+systems:
+  nes:
+    enabled: true
+    romm_slug: nes
+    retail_dat_pattern: Nintendo Entertainment System (Headered)
+    hack_dat_pattern: Nintendo - Nintendo Entertainment System
+    bios_dat_pattern: ""
+    redump_dat_pattern: ""
+    arcade_dat_pattern: ""
+  snes:
+    enabled: true
+    romm_slug: snes
+    retail_dat_pattern: Nintendo - Super Nintendo Entertainment System
+    hack_dat_pattern: Nintendo - Super Nintendo Entertainment System
+    bios_dat_pattern: ""
+    redump_dat_pattern: ""
+    arcade_dat_pattern: ""
+
+bootstrap:
+  romm_roms:
+    - nes
+    - snes
+  romm_bios:
+    - nes
+    - snes

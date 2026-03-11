@@ -20,6 +20,11 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 5. Dry-run sync:
    `bin/retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
+Set library root safely outside repo config using either:
+
+- XDG user config (recommended): `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
+- Environment variable override: `RETRO_COLLECTION_TOOL_ROOT=/mnt/media-emulation/RetroLibrary`
+
 ## Commands
 
 - `sync --systems <csv> | --all-systems [--compress]`
@@ -37,16 +42,16 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 
 Default config: `config/retro-collection-tool.yaml`
 
-Config discovery order (Terraform/Vault-style):
+Config is merged by precedence (low to high):
 
-1. `--config <path>`
-2. `RETRO_COLLECTION_TOOL_CONFIG`
-3. `./retro-collection-tool.yaml`
-4. `./.retro-collection-tool.yaml`
-5. `./config/retro-collection-tool.yaml`
-6. `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml` (or `~/.config/...` fallback)
+1. XDG user config (`$XDG_CONFIG_HOME/retro-collection-tool/config.yaml` etc.)
+2. Project config (`./retro-collection-tool.yaml`, `./.retro-collection-tool.yaml`, or `./config/retro-collection-tool.yaml`)
+3. `RETRO_COLLECTION_TOOL_CONFIG` (optional explicit layer)
+4. `--config <path>` (optional explicit layer)
 
-- `root` points at the RetroLibrary root.
+Then `RETRO_COLLECTION_TOOL_ROOT` overrides `root`.
+
+- `root` should come from your user XDG config or `RETRO_COLLECTION_TOOL_ROOT`.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
 - Default enabled systems: `nes`, `snes`, `genesis`, `sms`.

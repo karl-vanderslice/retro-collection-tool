@@ -22,6 +22,7 @@ import (
 
 const (
 	configEnvVar = "RETRO_COLLECTION_TOOL_CONFIG"
+	rootEnvVar   = "RETRO_COLLECTION_TOOL_ROOT"
 	appName      = "retro-collection-tool"
 )
 
@@ -48,17 +49,20 @@ func Run(args []string) error {
 		return errors.New("no command provided")
 	}
 
-	configPath, err := resolveConfigPath(globals.configPath)
+	configPaths, err := resolveConfigPaths(globals.configPath)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := config.LoadMerged(configPaths, config.EnvOverrides{Root: strings.TrimSpace(os.Getenv(rootEnvVar))})
 	if err != nil {
-		return fmt.Errorf("load config %s: %w", configPath, err)
+		return fmt.Errorf("load config layers %v: %w", configPaths, err)
 	}
 	if globals.verbose {
-		fmt.Printf("[config] using %s\n", configPath)
+		fmt.Printf("[config] merged layers (low->high): %s\n", strings.Join(configPaths, " -> "))
+		if strings.TrimSpace(os.Getenv(rootEnvVar)) != "" {
+			fmt.Printf("[config] root override via %s\n", rootEnvVar)
+		}
 	}
 
 	ctx := context.Background()
@@ -112,40 +116,73 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	return g, fs.Args(), nil
 }
 
-func resolveConfigPath(flagPath string) (string, error) {
-	if p := strings.TrimSpace(flagPath); p != "" {
-		return p, nil
+func resolveConfigPaths(flagPath string) ([]string, error) {
+	layers := make([]string, 0, 3)
+
+	if xdgPath := firstExistingConfigPath(xdgConfigCandidates()); xdgPath != "" {
+		layers = append(layers, xdgPath)
 	}
-	if p := strings.TrimSpace(os.Getenv(configEnvVar)); p != "" {
-		return p, nil
+	if projectPath := firstExistingConfigPath(projectConfigCandidates()); projectPath != "" {
+		layers = append(layers, projectPath)
 	}
 
+	if p := strings.TrimSpace(os.Getenv(configEnvVar)); p != "" {
+		layers = append(layers, p)
+	}
+	if p := strings.TrimSpace(flagPath); p != "" {
+		layers = append(layers, p)
+	}
+
+	if len(layers) == 0 {
+		candidates := append(projectConfigCandidates(), xdgConfigCandidates()...)
+		return nil, fmt.Errorf("no config found; set --config or %s (searched: %s)", configEnvVar, strings.Join(candidates, ", "))
+	}
+	return dedupePreserveOrder(layers), nil
+}
+
+func projectConfigCandidates() []string {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("get cwd: %w", err)
+		return nil
 	}
-
-	candidates := []string{
+	return []string{
 		filepath.Join(cwd, "retro-collection-tool.yaml"),
 		filepath.Join(cwd, ".retro-collection-tool.yaml"),
 		filepath.Join(cwd, "config", "retro-collection-tool.yaml"),
 	}
+}
 
+func xdgConfigCandidates() []string {
 	if configHome := xdg.ConfigHome(); configHome != "" {
-		candidates = append(candidates,
+		return []string{
 			filepath.Join(configHome, appName, "config.yaml"),
 			filepath.Join(configHome, appName, "config.yml"),
 			filepath.Join(configHome, appName, "retro-collection-tool.yaml"),
-		)
-	}
-
-	for _, c := range candidates {
-		if fileExists(c) {
-			return c, nil
 		}
 	}
+	return nil
+}
 
-	return "", fmt.Errorf("no config found; set --config or %s (searched: %s)", configEnvVar, strings.Join(candidates, ", "))
+func firstExistingConfigPath(candidates []string) string {
+	for _, c := range candidates {
+		if fileExists(c) {
+			return c
+		}
+	}
+	return ""
+}
+
+func dedupePreserveOrder(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 func fileExists(path string) bool {
@@ -197,7 +234,11 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 	}
 
 	datDir := cfg.ResolvePath(cfg.Paths.DatsNoIntro1G1R)
-	datPath, err := fsutil.FindLatestDAT(datDir, sysCfg.RetailDatPattern)
+	retailPattern := sysCfg.EffectiveRetailDatPattern()
+	if retailPattern == "" {
+		return fmt.Errorf("system %s has no retail DAT pattern configured", system)
+	}
+	datPath, err := fsutil.FindLatestDAT(datDir, retailPattern)
 	if err != nil {
 		return err
 	}
@@ -302,7 +343,11 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 		return err
 	}
 
-	datPath, err := fsutil.FindLatestDAT(cfg.ResolvePath(cfg.Paths.DatsNoIntroRaw), sysCfg.HackDatPattern)
+	hackPattern := sysCfg.EffectiveHackDatPattern()
+	if hackPattern == "" {
+		return fmt.Errorf("system %s has no hack DAT pattern configured", system)
+	}
+	datPath, err := fsutil.FindLatestDAT(cfg.ResolvePath(cfg.Paths.DatsNoIntroRaw), hackPattern)
 	if err != nil {
 		return err
 	}

@@ -49,6 +49,7 @@ type PathsConfig struct {
 type SystemConfig struct {
 	Enabled          bool   `yaml:"enabled"`
 	RommSlug         string `yaml:"romm_slug"`
+	DatPattern       string `yaml:"dat_pattern"`
 	RetailDatPattern string `yaml:"retail_dat_pattern"`
 	HackDatPattern   string `yaml:"hack_dat_pattern"`
 }
@@ -64,15 +65,47 @@ type BootstrapDirectoryLayout struct {
 	RommBios []string `yaml:"romm_bios"`
 }
 
+type EnvOverrides struct {
+	Root string
+}
+
 func Load(path string) (*Config, error) {
-	b, err := os.ReadFile(path)
+	return LoadMerged([]string{path}, EnvOverrides{})
+}
+
+func LoadMerged(paths []string, env EnvOverrides) (*Config, error) {
+	if len(paths) == 0 {
+		return nil, errors.New("no config files provided")
+	}
+
+	merged := map[string]any{}
+
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read config %s: %w", path, err)
+		}
+
+		var part map[string]any
+		if err := yaml.Unmarshal(b, &part); err != nil {
+			return nil, fmt.Errorf("parse config %s: %w", path, err)
+		}
+
+		mergeMaps(merged, part)
+	}
+
+	if strings.TrimSpace(env.Root) != "" {
+		merged["root"] = strings.TrimSpace(env.Root)
+	}
+
+	finalBytes, err := yaml.Marshal(merged)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, fmt.Errorf("marshal merged config: %w", err)
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(b, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+	if err := yaml.Unmarshal(finalBytes, &cfg); err != nil {
+		return nil, fmt.Errorf("parse merged config: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -80,6 +113,19 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func mergeMaps(dst map[string]any, src map[string]any) {
+	for k, v := range src {
+		srcMap, srcIsMap := v.(map[string]any)
+		dstMap, dstIsMap := dst[k].(map[string]any)
+		if srcIsMap && dstIsMap {
+			mergeMaps(dstMap, srcMap)
+			dst[k] = dstMap
+			continue
+		}
+		dst[k] = v
+	}
 }
 
 func (c *Config) Validate() error {
@@ -100,11 +146,25 @@ func (c *Config) Validate() error {
 		if strings.TrimSpace(v.RommSlug) == "" {
 			return fmt.Errorf("config.systems.%s.romm_slug is required", k)
 		}
-		if strings.TrimSpace(v.RetailDatPattern) == "" {
-			return fmt.Errorf("config.systems.%s.retail_dat_pattern is required", k)
+		if strings.TrimSpace(v.DatPattern) == "" && strings.TrimSpace(v.RetailDatPattern) == "" && strings.TrimSpace(v.HackDatPattern) == "" {
+			return fmt.Errorf("config.systems.%s requires dat_pattern or retail_dat_pattern or hack_dat_pattern", k)
 		}
 	}
 	return nil
+}
+
+func (s SystemConfig) EffectiveRetailDatPattern() string {
+	if p := strings.TrimSpace(s.RetailDatPattern); p != "" {
+		return p
+	}
+	return strings.TrimSpace(s.DatPattern)
+}
+
+func (s SystemConfig) EffectiveHackDatPattern() string {
+	if p := strings.TrimSpace(s.HackDatPattern); p != "" {
+		return p
+	}
+	return strings.TrimSpace(s.DatPattern)
 }
 
 func (c *Config) ResolvePath(p string) string {

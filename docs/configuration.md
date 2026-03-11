@@ -1,23 +1,25 @@
 # Configuration
 
-Primary config file: `config/retro-collection-tool.yaml`
+Config is merged in layers (low to high precedence):
 
-Config discovery order:
+1. XDG user config:
+   - `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
+   - `$XDG_CONFIG_HOME/retro-collection-tool/config.yml`
+   - `$XDG_CONFIG_HOME/retro-collection-tool/retro-collection-tool.yaml`
+2. Project config (first found):
+   - `./retro-collection-tool.yaml`
+   - `./.retro-collection-tool.yaml`
+   - `./config/retro-collection-tool.yaml`
+3. `RETRO_COLLECTION_TOOL_CONFIG` (optional explicit layer)
+4. `--config <path>` (optional explicit layer, highest file precedence)
 
-1. `--config <path>`
-2. `RETRO_COLLECTION_TOOL_CONFIG`
-3. `./retro-collection-tool.yaml`
-4. `./.retro-collection-tool.yaml`
-5. `./config/retro-collection-tool.yaml`
-6. `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
-7. `$XDG_CONFIG_HOME/retro-collection-tool/config.yml`
-8. `$XDG_CONFIG_HOME/retro-collection-tool/retro-collection-tool.yaml`
+Finally, `RETRO_COLLECTION_TOOL_ROOT` overrides merged `root`.
 
 When `XDG_CONFIG_HOME` is unset, `~/.config` is used.
 
 ## Core
 
-- `root`: absolute path to RetroLibrary root.
+- `root`: absolute path to RetroLibrary root. Recommended to keep in XDG user config or `RETRO_COLLECTION_TOOL_ROOT`, not in repo config.
 - `cache_dir`: cache directory relative to root, absolute path, or omitted.
 
 If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool` (or `~/.cache/retro-collection-tool`).
@@ -41,8 +43,14 @@ Each system includes:
 
 - `enabled`
 - `romm_slug`
+- `dat_pattern`
+
+Optional overrides:
+
 - `retail_dat_pattern`
 - `hack_dat_pattern`
+
+If override keys are omitted, `dat_pattern` is used for both workflows.
 
 BIOS, ReDump, and Arcade are currently feature-gated stubs and do not require per-system DAT keys yet.
 

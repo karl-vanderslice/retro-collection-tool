@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -23,6 +24,8 @@ const (
 	configEnvVar = "RETRO_COLLECTION_TOOL_CONFIG"
 	appName      = "retro-collection-tool"
 )
+
+var regionGroupRe = regexp.MustCompile(`\([^)]*\)`)
 
 type globalFlags struct {
 	configPath string
@@ -349,6 +352,11 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			fmt.Printf("[hacks:%s] processing %s with dat=%s\n", system, hackName, datPath)
 		}
 		if g.dryRun {
+			gameDir, err := resolveHackGameDir(baseOutput, inDir, hackName)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("[dry-run] target hack path %s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
 			fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
 			continue
 		}
@@ -361,17 +369,22 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return fmt.Errorf("hack %s produced no output: %w", hackName, err)
 		}
 
+		gameDir, err := resolveHackGameDir(baseOutput, inDir, hackName)
+		if err != nil {
+			return err
+		}
+
 		ext := filepath.Ext(patched)
-		targetDir := filepath.Join(baseOutput, sanitizeName(hackName), "hack")
+		targetDir := filepath.Join(gameDir, "hack")
 		targetFile := filepath.Join(targetDir, sanitizeName(hackName)+ext)
 		if err := fsutil.CopyFile(patched, targetFile); err != nil {
 			return err
 		}
 
-		// Try to place an unaltered ROM alongside the hack if a base ROM was staged.
+		// Place an unaltered ROM alongside the hack to satisfy ROMM hack folder expectations.
 		baseROM, err := firstROMInDir(inDir)
 		if err == nil {
-			baseDst := filepath.Join(baseOutput, sanitizeName(hackName), filepath.Base(baseROM))
+			baseDst := filepath.Join(gameDir, filepath.Base(baseROM))
 			if err := fsutil.LinkOrCopy(baseROM, baseDst); err != nil {
 				return err
 			}
@@ -500,6 +513,99 @@ func sanitizeName(name string) string {
 		return "unnamed"
 	}
 	return name
+}
+
+func resolveHackGameDir(systemOutputRoot, hackInputDir, hackName string) (string, error) {
+	baseROM, err := firstROMInDir(hackInputDir)
+	if err != nil {
+		// Fall back to a predictable location when no base ROM is staged.
+		return filepath.Join(systemOutputRoot, sanitizeName(hackName)), nil
+	}
+
+	baseName := strings.TrimSuffix(filepath.Base(baseROM), filepath.Ext(baseROM))
+	baseKey := normalizeGameKey(baseName)
+
+	if existingDir, err := findExistingGameDir(systemOutputRoot, baseKey); err == nil {
+		return existingDir, nil
+	}
+
+	if retailStem, err := findRetailStemMatch(systemOutputRoot, baseKey); err == nil {
+		return filepath.Join(systemOutputRoot, sanitizeName(retailStem)), nil
+	}
+
+	return filepath.Join(systemOutputRoot, sanitizeName(baseName)), nil
+}
+
+func findExistingGameDir(root, gameKey string) (string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if normalizeGameKey(entry.Name()) == gameKey {
+			return filepath.Join(root, entry.Name()), nil
+		}
+	}
+	return "", errors.New("no existing game dir match")
+}
+
+func findRetailStemMatch(root, gameKey string) (string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if normalizeGameKey(stem) == gameKey {
+			return stem, nil
+		}
+	}
+	return "", errors.New("no retail file match")
+}
+
+func normalizeGameKey(s string) string {
+	s = strings.TrimSpace(s)
+	s = removeRegionGroups(s)
+	s = strings.ToLower(s)
+	replacer := strings.NewReplacer("_", " ", "-", " ", ".", " ")
+	s = replacer.Replace(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func removeRegionGroups(name string) string {
+	return regionGroupRe.ReplaceAllStringFunc(name, func(group string) string {
+		content := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(group, "("), ")"))
+		if isRegionGroup(content) {
+			return ""
+		}
+		return group
+	})
+}
+
+func isRegionGroup(content string) bool {
+	if content == "" {
+		return false
+	}
+	regionTokens := []string{
+		"usa", "europe", "eur", "japan", "jpn", "world", "korea", "asia", "australia", "brazil",
+		"spain", "france", "germany", "italy", "netherlands", "sweden", "russia", "taiwan", "china", "uk",
+	}
+	norm := strings.ToLower(content)
+	for _, token := range strings.Split(norm, ",") {
+		t := strings.TrimSpace(token)
+		for _, region := range regionTokens {
+			if t == region {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func runBiosStub(cfg *config.Config) error {

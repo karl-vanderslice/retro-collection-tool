@@ -15,10 +15,10 @@ Applies curated patches from `roms/Hacks/<system>/<hack-name>/`.
 
 With global `--dry-run`, this command prints planned Igir patch invocations without writing files.
 
-Output layout per ROMM style:
-`roms/Library/roms/<system>/<hack-name>/hack/<hack-name>.<ext>`
+Hacks are now organized under the matched game directory when possible:
+`roms/Library/roms/<system>/<game>/hack/<hack-name>.<ext>`
 
-Also attempts to include unaltered base ROM in the same `<hack-name>/` directory.
+Game matching uses the base ROM name and normalizes region groups (for example `(USA, Europe)`), so translations/hacks can align with retail game folders.
 
 ## export
 

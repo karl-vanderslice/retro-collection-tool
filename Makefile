@@ -31,6 +31,16 @@ test:
 	$(ensure_nix_shell)
 	go test ./...
 
+.PHONY: pre-commit
+pre-commit:
+	$(ensure_nix_shell)
+	pre-commit run --all-files
+
+.PHONY: hooks-install
+hooks-install:
+	$(ensure_nix_shell)
+	pre-commit install --install-hooks
+
 .PHONY: fmt
 fmt:
 	$(ensure_nix_shell)

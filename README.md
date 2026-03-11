@@ -61,6 +61,8 @@ See `docs/configuration.md` for details.
 - `nix develop path:. -c make fmt`
 - `nix develop path:. -c make lint`
 - `nix develop path:. -c make test`
+- `nix develop path:. -c make hooks-install`
+- `nix develop path:. -c make pre-commit`
 - `nix develop path:. -c make docs-serve`
 
 ## Notes

@@ -10,6 +10,7 @@ This repository contains a production-focused CLI that wraps Igir for curated RO
 - Prefer `--dry-run` for validation in real libraries.
 - Keep BIOS, ReDump, and Arcade paths behind explicit feature flags until implemented.
 - Always commit completed work with a Conventional Commit message.
+- Add or update tests for every behavior change before committing.
 
 ## Current Scope
 

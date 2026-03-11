@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Enable Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v7
+
+      - name: Format Check
+        run: nix develop path:. --accept-flake-config -c make fmt && git diff --exit-code
+
+      - name: Lint
+        run: nix develop path:. --accept-flake-config -c make lint
+
+      - name: Test
+        run: nix develop path:. --accept-flake-config -c make test
+
+      - name: Build
+        run: nix develop path:. --accept-flake-config -c make build
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retro-collection-tool-linux-amd64
+          path: bin/retro-collection-tool
+          if-no-files-found: error

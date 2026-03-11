@@ -76,3 +76,14 @@ See `docs/configuration.md` for details.
 - `--dry-run` is a plan mode: validates config/input selection and prints Igir commands without executing writes.
 - Commands fail fast on unexpected trailing arguments.
 - Uses conventional commit style in this repository.
+
+## CI
+
+GitHub Actions runs on push/PR to `master` and executes:
+
+- `make fmt` (with diff check)
+- `make lint`
+- `make test`
+- `make build`
+
+It uploads `bin/retro-collection-tool` as a build artifact. No release tagging/publishing is performed.

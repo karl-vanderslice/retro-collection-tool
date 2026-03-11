@@ -9,3 +9,4 @@ result/
 *.swo
 coverage.out
 site/
+!flake.lock

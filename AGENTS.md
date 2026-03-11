@@ -9,6 +9,7 @@ This repository contains a production-focused CLI that wraps Igir for curated RO
 - Never modify `/mnt/media-emulation/RetroLibrary` while developing unless explicitly requested.
 - Prefer `--dry-run` for validation in real libraries.
 - Keep BIOS, ReDump, and Arcade paths behind explicit feature flags until implemented.
+- Always commit completed work with a Conventional Commit message.
 
 ## Current Scope
 

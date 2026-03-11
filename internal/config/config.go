@@ -51,9 +51,6 @@ type SystemConfig struct {
 	RommSlug         string `yaml:"romm_slug"`
 	RetailDatPattern string `yaml:"retail_dat_pattern"`
 	HackDatPattern   string `yaml:"hack_dat_pattern"`
-	BiosDatPattern   string `yaml:"bios_dat_pattern"`
-	RedumpDatPattern string `yaml:"redump_dat_pattern"`
-	ArcadeDatPattern string `yaml:"arcade_dat_pattern"`
 }
 
 type FeatureToggles struct {

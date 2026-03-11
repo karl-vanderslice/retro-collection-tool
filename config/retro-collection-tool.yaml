@@ -35,17 +35,11 @@ systems:
     romm_slug: nes
     retail_dat_pattern: Nintendo Entertainment System (Headered)
     hack_dat_pattern: Nintendo - Nintendo Entertainment System
-    bios_dat_pattern: ""
-    redump_dat_pattern: ""
-    arcade_dat_pattern: ""
   snes:
     enabled: true
     romm_slug: snes
     retail_dat_pattern: Nintendo - Super Nintendo Entertainment System
     hack_dat_pattern: Nintendo - Super Nintendo Entertainment System
-    bios_dat_pattern: ""
-    redump_dat_pattern: ""
-    arcade_dat_pattern: ""
 
 bootstrap:
   romm_roms:

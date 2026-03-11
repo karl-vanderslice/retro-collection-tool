@@ -28,6 +28,7 @@ Each system includes:
 - `romm_slug`
 - `retail_dat_pattern`
 - `hack_dat_pattern`
-- optional placeholders for BIOS/ReDump/Arcade patterns
+
+BIOS, ReDump, and Arcade are currently feature-gated stubs and do not require per-system DAT keys yet.
 
 DAT selection always picks the latest matching `.dat` by modification time.

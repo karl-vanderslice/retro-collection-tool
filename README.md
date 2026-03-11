@@ -65,5 +65,6 @@ See `docs/configuration.md` for details.
 ## Notes
 
 - Tool is safe for automation and exits non-zero on failures.
-- Prefer `--dry-run` before writes in production libraries.
+- `--dry-run` is a plan mode: validates config/input selection and prints Igir commands without executing writes.
+- Commands fail fast on unexpected trailing arguments.
 - Uses conventional commit style in this repository.

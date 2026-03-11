@@ -4,12 +4,16 @@
 
 Runs Igir retail synchronization with hardlinks.
 
+With global `--dry-run`, this command performs validation and prints the exact Igir command without executing it.
+
 Example:
 `retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
 ## hacks
 
 Applies curated patches from `roms/Hacks/<system>/<hack-name>/`.
+
+With global `--dry-run`, this command prints planned Igir patch invocations without writing files.
 
 Output layout per ROMM style:
 `roms/Library/roms/<system>/<hack-name>/hack/<hack-name>.<ext>`

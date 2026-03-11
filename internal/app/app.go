@@ -167,6 +167,9 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := ensureNoPositionalArgs("sync", fs.Args()); err != nil {
+		return err
+	}
 
 	systems, err := platform.ExpandSystems([]string{sf.systemsCSV}, sf.allSystems, cfg)
 	if err != nil {
@@ -234,12 +237,12 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 		}
 		args = append(args, "--zip")
 	}
-	if g.dryRun {
-		args = append(args, "--dry-run")
-	}
-
 	if g.verbose {
 		fmt.Printf("[sync:%s] dat=%s output=%s\n", system, datPath, rommDir)
+	}
+	if g.dryRun {
+		fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
+		return nil
 	}
 	return runner.Run(ctx, args)
 }
@@ -256,6 +259,9 @@ func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g gl
 	fs.StringVar(&hf.systemsCSV, "systems", "", "comma-separated system slugs")
 	fs.BoolVar(&hf.allSystems, "all-systems", false, "run all enabled systems")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := ensureNoPositionalArgs("hacks", fs.Args()); err != nil {
 		return err
 	}
 
@@ -339,18 +345,15 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			"--overwrite-invalid",
 			"--cache-path", cachePath,
 		}
-		if g.dryRun {
-			args = append(args, "--dry-run")
-		}
-
 		if g.verbose {
 			fmt.Printf("[hacks:%s] processing %s with dat=%s\n", system, hackName, datPath)
 		}
+		if g.dryRun {
+			fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
+			continue
+		}
 		if err := runner.Run(ctx, args); err != nil {
 			return err
-		}
-		if g.dryRun {
-			continue
 		}
 
 		patched, err := firstPatchedROMInDir(outDir)
@@ -524,6 +527,9 @@ func runCache(cfg *config.Config, args []string) error {
 	if len(args) == 0 {
 		return errors.New("cache requires subcommand: clean|path")
 	}
+	if len(args) > 1 {
+		return fmt.Errorf("cache: unexpected arguments: %s", strings.Join(args[1:], ", "))
+	}
 	cacheRoot := cfg.ResolvePath(cfg.CacheDir)
 	if strings.TrimSpace(cfg.CacheDir) == "" {
 		cacheRoot = resolveCacheRoot(cfg)
@@ -546,6 +552,9 @@ func runExport(cfg *config.Config, g globalFlags, args []string) error {
 	allSystems := fs.Bool("all-systems", false, "export all enabled systems")
 	destination := fs.String("destination", "", "destination root path (e.g., mounted SD card)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := ensureNoPositionalArgs("export", fs.Args()); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*destination) == "" {
@@ -656,6 +665,13 @@ Commands:
   bootstrap   Create expected directory structure
   systems     List enabled systems
   version     Print version`) //nolint:lll
+}
+
+func ensureNoPositionalArgs(command string, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: unexpected arguments: %s", command, strings.Join(args, ", "))
 }
 
 func resolveCacheRoot(cfg *config.Config) string {

@@ -78,6 +78,8 @@ func Run(args []string) error {
 		return runArcadeStub(cfg)
 	case "cache":
 		return runCache(cfg, rest[1:])
+	case "clean":
+		return runClean(cfg, globals, rest[1:])
 	case "export":
 		return runExport(cfg, globals, rest[1:])
 	case "bootstrap":
@@ -352,11 +354,14 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			fmt.Printf("[hacks:%s] processing %s with dat=%s\n", system, hackName, datPath)
 		}
 		if g.dryRun {
-			gameDir, err := resolveHackGameDir(baseOutput, inDir, hackName)
+			gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
 			if err != nil {
 				return err
 			}
 			fmt.Printf("[dry-run] target hack path %s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
+			if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
+				return err
+			}
 			fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
 			continue
 		}
@@ -369,7 +374,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return fmt.Errorf("hack %s produced no output: %w", hackName, err)
 		}
 
-		gameDir, err := resolveHackGameDir(baseOutput, inDir, hackName)
+		gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
 		if err != nil {
 			return err
 		}
@@ -381,13 +386,8 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return err
 		}
 
-		// Place an unaltered ROM alongside the hack to satisfy ROMM hack folder expectations.
-		baseROM, err := firstROMInDir(inDir)
-		if err == nil {
-			baseDst := filepath.Join(gameDir, filepath.Base(baseROM))
-			if err := fsutil.LinkOrCopy(baseROM, baseDst); err != nil {
-				return err
-			}
+		if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, false, g.verbose); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -515,25 +515,77 @@ func sanitizeName(name string) string {
 	return name
 }
 
-func resolveHackGameDir(systemOutputRoot, hackInputDir, hackName string) (string, error) {
+func resolveHackGameDir(systemOutputRoot, hackInputDir, hackName string) (string, string, error) {
 	baseROM, err := firstROMInDir(hackInputDir)
 	if err != nil {
 		// Fall back to a predictable location when no base ROM is staged.
-		return filepath.Join(systemOutputRoot, sanitizeName(hackName)), nil
+		fallback := sanitizeName(hackName)
+		return filepath.Join(systemOutputRoot, fallback), normalizeGameKey(fallback), nil
 	}
 
 	baseName := strings.TrimSuffix(filepath.Base(baseROM), filepath.Ext(baseROM))
 	baseKey := normalizeGameKey(baseName)
 
 	if existingDir, err := findExistingGameDir(systemOutputRoot, baseKey); err == nil {
-		return existingDir, nil
+		return existingDir, baseKey, nil
 	}
 
 	if retailStem, err := findRetailStemMatch(systemOutputRoot, baseKey); err == nil {
-		return filepath.Join(systemOutputRoot, sanitizeName(retailStem)), nil
+		return filepath.Join(systemOutputRoot, sanitizeName(retailStem)), baseKey, nil
 	}
 
-	return filepath.Join(systemOutputRoot, sanitizeName(baseName)), nil
+	return filepath.Join(systemOutputRoot, sanitizeName(baseName)), baseKey, nil
+}
+
+func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun, verbose bool) error {
+	entries, err := os.ReadDir(systemOutputRoot)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		stem := strings.TrimSuffix(name, filepath.Ext(name))
+		if normalizeGameKey(stem) != gameKey {
+			continue
+		}
+
+		src := filepath.Join(systemOutputRoot, name)
+		dst := filepath.Join(gameDir, name)
+
+		if dryRun {
+			fmt.Printf("[dry-run] move retail %s -> %s\n", src, dst)
+			continue
+		}
+
+		if err := fsutil.EnsureDir(gameDir); err != nil {
+			return err
+		}
+		if err := moveFile(src, dst); err != nil {
+			return err
+		}
+		if verbose {
+			fmt.Printf("[hacks] moved retail %s -> %s\n", src, dst)
+		}
+	}
+
+	return nil
+}
+
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := fsutil.CopyFile(src, dst); err != nil {
+		return err
+	}
+	if err := os.Remove(src); err != nil {
+		return fmt.Errorf("remove source %s after copy: %w", src, err)
+	}
+	return nil
 }
 
 func findExistingGameDir(root, gameKey string) (string, error) {
@@ -651,6 +703,53 @@ func runCache(cfg *config.Config, args []string) error {
 	}
 }
 
+type cleanFlags struct {
+	systemsCSV  string
+	allSystems  bool
+	includeBios bool
+}
+
+func runClean(cfg *config.Config, g globalFlags, args []string) error {
+	var cf cleanFlags
+	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&cf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.BoolVar(&cf.allSystems, "all-systems", false, "clean all enabled systems")
+	fs.BoolVar(&cf.includeBios, "include-bios", false, "also remove BIOS target directories")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := ensureNoPositionalArgs("clean", fs.Args()); err != nil {
+		return err
+	}
+
+	systems, err := platform.ExpandSystems([]string{cf.systemsCSV}, cf.allSystems, cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range systems {
+		sysCfg := cfg.Systems[s]
+		romTarget := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
+		if g.dryRun {
+			fmt.Printf("[dry-run] remove %s\n", romTarget)
+		} else if err := fsutil.RemoveIfExists(romTarget); err != nil {
+			return err
+		}
+
+		if cf.includeBios {
+			biosTarget := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug)
+			if g.dryRun {
+				fmt.Printf("[dry-run] remove %s\n", biosTarget)
+			} else if err := fsutil.RemoveIfExists(biosTarget); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func runExport(cfg *config.Config, g globalFlags, args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -763,6 +862,7 @@ Global flags:
 Commands:
   sync        Run retail sync with Igir
   hacks       Run curated ROM hacks patch workflow
+	clean       Remove target output directories for selected systems
   bios        BIOS workflow (stub)
   redump      ReDump workflow (stub)
   arcade      Arcade workflow (stub)

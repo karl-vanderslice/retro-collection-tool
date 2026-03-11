@@ -20,6 +20,17 @@ Hacks are now organized under the matched game directory when possible:
 
 Game matching uses the base ROM name and normalizes region groups (for example `(USA, Europe)`), so translations/hacks can align with retail game folders.
 
+Matching retail ROM files in the system root are moved into the matched `<game>/` folder. Source files from `roms/Hacks` are only used for patching inputs.
+
+## clean
+
+Removes target output directories for selected systems.
+
+Examples:
+`retro-collection-tool clean --systems genesis`
+
+`retro-collection-tool --dry-run clean --all-systems --include-bios`
+
 ## export
 
 Copies selected systems to another destination (for SD cards).

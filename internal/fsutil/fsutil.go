@@ -9,6 +9,12 @@ import (
 
 func EnsureDir(path string) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
+		if info, statErr := os.Stat(path); statErr == nil {
+			if info.IsDir() {
+				return nil
+			}
+			return fmt.Errorf("create dir %s: path exists and is not a directory", path)
+		}
 		return fmt.Errorf("create dir %s: %w", path, err)
 	}
 	return nil

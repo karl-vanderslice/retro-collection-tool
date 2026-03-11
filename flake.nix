@@ -21,6 +21,14 @@
             gofmt.enable = true;
             shellcheck.enable = true;
             prettier.enable = true;
+            flake-lock-required = {
+              enable = true;
+              name = "flake-lock-required";
+              entry = "bash scripts/check-flake-lock-tracked.sh";
+              language = "system";
+              pass_filenames = false;
+              always_run = true;
+            };
           };
         };
       in {

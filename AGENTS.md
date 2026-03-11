@@ -11,6 +11,7 @@ This repository contains a production-focused CLI that wraps Igir for curated RO
 - Keep BIOS, ReDump, and Arcade paths behind explicit feature flags until implemented.
 - Always commit completed work with a Conventional Commit message.
 - Add or update tests for every behavior change before committing.
+- Keep `flake.lock` tracked and committed (repo policy overrides global gitignore patterns).
 
 ## Current Scope
 

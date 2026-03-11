@@ -18,7 +18,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 4. Bootstrap directories (safe create-only):
    `bin/retro-collection-tool --config config/retro-collection-tool.yaml bootstrap`
 5. Dry-run sync:
-   `bin/retro-collection-tool --config config/retro-collection-tool.yaml --dry-run sync --systems nes,snes`
+   `bin/retro-collection-tool --config config/retro-collection-tool.yaml --dry-run sync --systems nes,snes,genesis,sms`
 
 ## Commands
 
@@ -39,6 +39,7 @@ Default config: `config/retro-collection-tool.yaml`
 - `root` points at the RetroLibrary root.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
+- Default enabled systems: `nes`, `snes`, `genesis`, `sms`.
 
 See `docs/configuration.md` for details.
 

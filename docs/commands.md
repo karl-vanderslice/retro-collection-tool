@@ -5,7 +5,7 @@
 Runs Igir retail synchronization with hardlinks.
 
 Example:
-`retro-collection-tool --dry-run sync --systems nes,snes`
+`retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
 ## hacks
 

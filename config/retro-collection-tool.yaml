@@ -40,11 +40,25 @@ systems:
     romm_slug: snes
     retail_dat_pattern: Nintendo - Super Nintendo Entertainment System
     hack_dat_pattern: Nintendo - Super Nintendo Entertainment System
+  genesis:
+    enabled: true
+    romm_slug: genesis
+    retail_dat_pattern: Sega - Mega Drive - Genesis
+    hack_dat_pattern: Sega - Mega Drive - Genesis
+  sms:
+    enabled: true
+    romm_slug: sms
+    retail_dat_pattern: Sega - Master System - Mark III
+    hack_dat_pattern: Sega - Master System - Mark III
 
 bootstrap:
   romm_roms:
     - nes
     - snes
+    - genesis
+    - sms
   romm_bios:
     - nes
     - snes
+    - genesis
+    - sms

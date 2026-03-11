@@ -1,10 +1,12 @@
 package app
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -295,7 +297,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			continue
 		}
 
-		patched, err := firstFileInDir(outDir)
+		patched, err := firstPatchedROMInDir(outDir)
 		if err != nil {
 			return fmt.Errorf("hack %s produced no output: %w", hackName, err)
 		}
@@ -320,9 +322,20 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 }
 
 func stageHackFiles(srcDir, inDir, patchDir string) error {
+	if err := fsutil.WalkFiles(srcDir, func(path string, _ os.DirEntry) error {
+		if strings.ToLower(filepath.Ext(path)) != ".zip" {
+			return nil
+		}
+		return unzipInto(path, srcDir)
+	}); err != nil {
+		return err
+	}
+
 	return fsutil.WalkFiles(srcDir, func(path string, _ os.DirEntry) error {
 		ext := strings.ToLower(filepath.Ext(path))
 		switch ext {
+		case ".zip":
+			return nil
 		case ".ips", ".bps", ".ups", ".xdelta":
 			return fsutil.CopyFile(path, filepath.Join(patchDir, filepath.Base(path)))
 		default:
@@ -331,7 +344,11 @@ func stageHackFiles(srcDir, inDir, patchDir string) error {
 	})
 }
 
-func firstFileInDir(dir string) (string, error) {
+func firstPatchedROMInDir(dir string) (string, error) {
+	if rom, err := firstROMInDir(dir); err == nil {
+		return rom, nil
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", err
@@ -343,6 +360,59 @@ func firstFileInDir(dir string) (string, error) {
 		return filepath.Join(dir, e.Name()), nil
 	}
 	return "", errors.New("no file found")
+}
+
+func unzipInto(zipPath, dstRoot string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("open zip %s: %w", zipPath, err)
+	}
+	defer func() {
+		_ = r.Close()
+	}()
+
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		cleanName := filepath.Clean(f.Name)
+		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
+			return fmt.Errorf("zip %s contains unsafe path: %s", zipPath, f.Name)
+		}
+
+		targetPath := filepath.Join(dstRoot, cleanName)
+		if err := fsutil.EnsureDir(filepath.Dir(targetPath)); err != nil {
+			return err
+		}
+
+		src, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("open zip entry %s in %s: %w", f.Name, zipPath, err)
+		}
+
+		dst, err := os.Create(targetPath)
+		if err != nil {
+			_ = src.Close()
+			return fmt.Errorf("create extracted file %s: %w", targetPath, err)
+		}
+
+		if _, err := io.Copy(dst, src); err != nil {
+			_ = dst.Close()
+			_ = src.Close()
+			return fmt.Errorf("extract %s from %s: %w", f.Name, zipPath, err)
+		}
+
+		if err := dst.Close(); err != nil {
+			_ = src.Close()
+			return fmt.Errorf("close extracted file %s: %w", targetPath, err)
+		}
+		if err := src.Close(); err != nil {
+			return fmt.Errorf("close zip entry %s in %s: %w", f.Name, zipPath, err)
+		}
+	}
+
+	return nil
 }
 
 func firstROMInDir(dir string) (string, error) {

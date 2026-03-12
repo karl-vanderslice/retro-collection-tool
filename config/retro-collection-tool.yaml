@@ -29,32 +29,104 @@ features:
   enable_arcade: false
 
 systems:
+  gb:
+    enabled: true
+    romm_slug: gb
+    dat_pattern: Nintendo - Game Boy
+  gba:
+    enabled: true
+    romm_slug: gba
+    dat_pattern: Nintendo - Game Boy Advance
+  gbc:
+    enabled: true
+    romm_slug: gbc
+    dat_pattern: Nintendo - Game Boy Color
+  genesis:
+    enabled: true
+    romm_slug: genesis
+    dat_pattern: Sega - Mega Drive - Genesis
+  gamegear:
+    enabled: true
+    romm_slug: gamegear
+    dat_pattern: Sega - Game Gear
+  msx:
+    enabled: true
+    romm_slug: msx
+    dat_pattern: Microsoft - MSX
+  msx2:
+    enabled: true
+    romm_slug: msx2
+    dat_pattern: Microsoft - MSX2
+  n64:
+    enabled: true
+    romm_slug: n64
+    dat_pattern: Nintendo - Nintendo 64 (BigEndian)
   nes:
     enabled: true
     romm_slug: nes
     dat_pattern: Nintendo - Nintendo Entertainment System
     retail_dat_pattern: Nintendo Entertainment System (Headered)
+  neo-geo-pocket:
+    enabled: true
+    romm_slug: neo-geo-pocket
+    dat_pattern: SNK - NeoGeo Pocket
+  neo-geo-pocket-color:
+    enabled: true
+    romm_slug: neo-geo-pocket-color
+    dat_pattern: SNK - NeoGeo Pocket Color
+  sega32:
+    enabled: true
+    romm_slug: sega32
+    dat_pattern: Sega - 32X
   snes:
     enabled: true
     romm_slug: snes
     dat_pattern: Nintendo - Super Nintendo Entertainment System
-  genesis:
-    enabled: true
-    romm_slug: genesis
-    dat_pattern: Sega - Mega Drive - Genesis
   sms:
     enabled: true
     romm_slug: sms
     dat_pattern: Sega - Master System - Mark III
+  supergrafx:
+    enabled: true
+    romm_slug: supergrafx
+    dat_pattern: NEC - PC Engine SuperGrafx
+  tg16:
+    enabled: true
+    romm_slug: tg16
+    dat_pattern: NEC - PC Engine - TurboGrafx-16
 
 bootstrap:
   romm_roms:
+    - gb
+    - gba
+    - gbc
+    - gamegear
     - nes
-    - snes
     - genesis
+    - msx
+    - msx2
+    - n64
+    - neo-geo-pocket
+    - neo-geo-pocket-color
+    - sega32
     - sms
+    - snes
+    - supergrafx
+    - tg16
   romm_bios:
+    - gb
+    - gba
+    - gbc
+    - gamegear
     - nes
-    - snes
     - genesis
+    - msx
+    - msx2
+    - n64
+    - neo-geo-pocket
+    - neo-geo-pocket-color
+    - sega32
     - sms
+    - snes
+    - supergrafx
+    - tg16

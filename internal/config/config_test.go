@@ -108,3 +108,104 @@ func TestSystemConfigEffectiveDatPattern_Overrides(t *testing.T) {
 		t.Fatalf("hack override mismatch: %q", got)
 	}
 }
+
+func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
+	defaultConfigPath := filepath.Join(wd, "..", "..", "config", "retro-collection-tool.yaml")
+	cfg, err := LoadMerged([]string{defaultConfigPath}, EnvOverrides{Root: "/tmp/retro-library"})
+	if err != nil {
+		t.Fatalf("LoadMerged default config: %v", err)
+	}
+
+	testCases := map[string]struct {
+		rommSlug   string
+		datPattern string
+	}{
+		"msx": {
+			rommSlug:   "msx",
+			datPattern: "Microsoft - MSX",
+		},
+		"msx2": {
+			rommSlug:   "msx2",
+			datPattern: "Microsoft - MSX2",
+		},
+		"tg16": {
+			rommSlug:   "tg16",
+			datPattern: "NEC - PC Engine - TurboGrafx-16",
+		},
+		"supergrafx": {
+			rommSlug:   "supergrafx",
+			datPattern: "NEC - PC Engine SuperGrafx",
+		},
+		"gb": {
+			rommSlug:   "gb",
+			datPattern: "Nintendo - Game Boy",
+		},
+		"gba": {
+			rommSlug:   "gba",
+			datPattern: "Nintendo - Game Boy Advance",
+		},
+		"gbc": {
+			rommSlug:   "gbc",
+			datPattern: "Nintendo - Game Boy Color",
+		},
+		"n64": {
+			rommSlug:   "n64",
+			datPattern: "Nintendo - Nintendo 64 (BigEndian)",
+		},
+		"nes": {
+			rommSlug:   "nes",
+			datPattern: "Nintendo - Nintendo Entertainment System",
+		},
+		"snes": {
+			rommSlug:   "snes",
+			datPattern: "Nintendo - Super Nintendo Entertainment System",
+		},
+		"neo-geo-pocket": {
+			rommSlug:   "neo-geo-pocket",
+			datPattern: "SNK - NeoGeo Pocket",
+		},
+		"neo-geo-pocket-color": {
+			rommSlug:   "neo-geo-pocket-color",
+			datPattern: "SNK - NeoGeo Pocket Color",
+		},
+		"sega32": {
+			rommSlug:   "sega32",
+			datPattern: "Sega - 32X",
+		},
+		"gamegear": {
+			rommSlug:   "gamegear",
+			datPattern: "Sega - Game Gear",
+		},
+		"sms": {
+			rommSlug:   "sms",
+			datPattern: "Sega - Master System - Mark III",
+		},
+		"genesis": {
+			rommSlug:   "genesis",
+			datPattern: "Sega - Mega Drive - Genesis",
+		},
+	}
+
+	for key, tc := range testCases {
+		sysCfg, ok := cfg.Systems[key]
+		if !ok {
+			t.Fatalf("missing system %q in default config", key)
+		}
+		if !sysCfg.Enabled {
+			t.Fatalf("expected system %q to be enabled", key)
+		}
+		if sysCfg.RommSlug != tc.rommSlug {
+			t.Fatalf("romm slug mismatch for %q: got %q want %q", key, sysCfg.RommSlug, tc.rommSlug)
+		}
+		if sysCfg.DatPattern != tc.datPattern {
+			t.Fatalf("dat pattern mismatch for %q: got %q want %q", key, sysCfg.DatPattern, tc.datPattern)
+		}
+	}
+}

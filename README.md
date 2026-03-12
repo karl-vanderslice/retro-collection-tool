@@ -54,7 +54,7 @@ Then `RETRO_COLLECTION_TOOL_ROOT` overrides `root`.
 - `root` should come from your user XDG config or `RETRO_COLLECTION_TOOL_ROOT`.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
-- Default enabled systems: `nes`, `snes`, `genesis`, `sms`.
+- Default enabled systems: `gb`, `gba`, `gbc`, `gamegear`, `genesis`, `msx`, `msx2`, `n64`, `nes`, `neo-geo-pocket`, `neo-geo-pocket-color`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`.
 
 If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool`.
 

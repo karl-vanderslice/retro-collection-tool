@@ -215,6 +215,7 @@ type syncFlags struct {
 	systemsCSV string
 	allSystems bool
 	compress   bool
+	noHacks    bool
 }
 
 func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, args []string) error {
@@ -224,6 +225,7 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 	fs.StringVar(&sf.systemsCSV, "systems", "", "comma-separated system slugs")
 	fs.BoolVar(&sf.allSystems, "all-systems", false, "run all enabled systems")
 	fs.BoolVar(&sf.compress, "compress", false, "enable zip output if configured")
+	fs.BoolVar(&sf.noHacks, "no-hacks", false, "sync retail only; skip hacks build")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -238,6 +240,20 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 
 	for _, system := range systems {
 		if err := syncRetailSystem(ctx, cfg, runner, g, system, sf.compress); err != nil {
+			return err
+		}
+	}
+
+	if !sf.noHacks {
+		for _, system := range systems {
+			if err := runHacksSystem(ctx, cfg, g, system, true); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, system := range systems {
+		if err := organizeSystemLayout(cfg, g, system); err != nil {
 			return err
 		}
 	}
@@ -341,6 +357,11 @@ func runHacks(ctx context.Context, cfg *config.Config, g globalFlags, args []str
 			return err
 		}
 	}
+	for _, system := range systems {
+		if err := organizeSystemLayout(cfg, g, system); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -376,7 +397,6 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		workRoot := filepath.Join(resolveCacheRoot(cfg), "work", system, sanitizeName(hackName))
 		inDir := filepath.Join(workRoot, "in")
 		patchDir := filepath.Join(workRoot, "patch")
-		outDir := filepath.Join(workRoot, "out")
 
 		if err := fsutil.RemoveIfExists(workRoot); err != nil {
 			return err
@@ -385,9 +405,6 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 			return err
 		}
 		if err := fsutil.EnsureDir(patchDir); err != nil {
-			return err
-		}
-		if err := fsutil.EnsureDir(outDir); err != nil {
 			return err
 		}
 
@@ -534,6 +551,7 @@ func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles 
 			fmt.Printf("[hacks] rompatcher step %d: npx %s\n", i+1, strings.Join(cmdArgs, " "))
 		}
 		cmd := exec.CommandContext(ctx, "npx", cmdArgs...)
+		cmd.Dir = stepDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -669,6 +687,63 @@ func sanitizeName(name string) string {
 		return "unnamed"
 	}
 	return name
+}
+
+func organizeSystemLayout(cfg *config.Config, g globalFlags, system string) error {
+	sysCfg := cfg.Systems[system]
+	root := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
+	if err := fsutil.EnsureDir(root); err != nil {
+		return err
+	}
+	return organizeRetailFilesInRoot(root, g.dryRun, g.verbose)
+}
+
+func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if !isROMExt(ext) {
+			continue
+		}
+
+		stem := strings.TrimSuffix(name, filepath.Ext(name))
+		targetDir := filepath.Join(root, sanitizeName(stem))
+		targetFile := filepath.Join(targetDir, name)
+		srcFile := filepath.Join(root, name)
+
+		if dryRun {
+			fmt.Printf("[dry-run] organize retail %s -> %s\n", srcFile, targetFile)
+			continue
+		}
+
+		if err := fsutil.EnsureDir(targetDir); err != nil {
+			return err
+		}
+		if _, err := os.Stat(targetFile); err == nil {
+			if verbose {
+				fmt.Printf("[organize] skip existing retail file %s\n", targetFile)
+			}
+			if err := os.Remove(srcFile); err != nil {
+				return fmt.Errorf("remove duplicate retail file %s: %w", srcFile, err)
+			}
+			continue
+		}
+		if err := moveFile(srcFile, targetFile); err != nil {
+			return err
+		}
+		if verbose {
+			fmt.Printf("[organize] moved retail %s -> %s\n", srcFile, targetFile)
+		}
+	}
+	return nil
 }
 
 func resolveHackGameDir(systemOutputRoot, hackInputDir, hackName string) (string, string, error) {

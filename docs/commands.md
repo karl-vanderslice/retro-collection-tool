@@ -2,7 +2,13 @@
 
 ## sync
 
-Runs Igir retail synchronization with hardlinks.
+Runs the full default pipeline:
+
+1. Retail sync with Igir hardlinks.
+2. Hacks build with `rompatcherjs`.
+3. Folder organization per game (`<game>/<retail-file>` and `<game>/hack/<hack-file>`).
+
+Use `--no-hacks` to run retail sync only.
 
 With global `--dry-run`, this command performs validation and prints the exact Igir command without executing it.
 

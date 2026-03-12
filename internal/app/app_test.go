@@ -117,3 +117,45 @@ func TestCollectPatchFilesSorted(t *testing.T) {
 		t.Fatalf("unexpected patch order:\n got: %#v\nwant: %#v", got, want)
 	}
 }
+
+func TestOrganizeRetailFilesInRootMovesIntoGameFolder(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	name := "Phantasy Star II (USA, Europe) (Rev A).md"
+	src := filepath.Join(root, name)
+	if err := os.WriteFile(src, []byte("rom"), 0o644); err != nil {
+		t.Fatalf("write source rom: %v", err)
+	}
+
+	if err := organizeRetailFilesInRoot(root, false, false); err != nil {
+		t.Fatalf("organizeRetailFilesInRoot: %v", err)
+	}
+
+	dst := filepath.Join(root, "Phantasy Star II (USA, Europe) (Rev A)", name)
+	if _, err := os.Stat(dst); err != nil {
+		t.Fatalf("expected organized retail file at %s: %v", dst, err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("expected source file to be moved, stat err=%v", err)
+	}
+}
+
+func TestOrganizeRetailFilesInRootDryRunDoesNotMove(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	name := "Sonic the Hedgehog (USA, Europe).md"
+	src := filepath.Join(root, name)
+	if err := os.WriteFile(src, []byte("rom"), 0o644); err != nil {
+		t.Fatalf("write source rom: %v", err)
+	}
+
+	if err := organizeRetailFilesInRoot(root, true, false); err != nil {
+		t.Fatalf("organizeRetailFilesInRoot dry-run: %v", err)
+	}
+
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("expected source file to remain in dry-run: %v", err)
+	}
+}

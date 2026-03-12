@@ -159,3 +159,49 @@ func TestOrganizeRetailFilesInRootDryRunDoesNotMove(t *testing.T) {
 		t.Fatalf("expected source file to remain in dry-run: %v", err)
 	}
 }
+
+func TestOrganizeRetailFilesInRootSupportsExpandedSystemExtensions(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	romFiles := []string{
+		"Sonic Blast (USA, Europe).gg",
+		"Golden Axe (World).sms",
+		"Pokemon Red Version (USA, Europe).gb",
+		"Mario Kart 64 (USA).z64",
+		"SNK vs. Capcom - Match of the Millennium (USA, Europe).ngc",
+		"Metal Gear 2 - Solid Snake (Japan).rom",
+		"Thexder (Japan).cas",
+	}
+
+	for _, name := range romFiles {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("rom"), 0o644); err != nil {
+			t.Fatalf("write source rom %s: %v", name, err)
+		}
+	}
+
+	nonROM := "README.txt"
+	nonROMSrc := filepath.Join(root, nonROM)
+	if err := os.WriteFile(nonROMSrc, []byte("note"), 0o644); err != nil {
+		t.Fatalf("write non-rom file: %v", err)
+	}
+
+	if err := organizeRetailFilesInRoot(root, false, false); err != nil {
+		t.Fatalf("organizeRetailFilesInRoot: %v", err)
+	}
+
+	for _, name := range romFiles {
+		stem := name[:len(name)-len(filepath.Ext(name))]
+		dst := filepath.Join(root, stem, name)
+		if _, err := os.Stat(dst); err != nil {
+			t.Fatalf("expected organized rom file at %s: %v", dst, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
+			t.Fatalf("expected source rom file %s to be moved, stat err=%v", name, err)
+		}
+	}
+
+	if _, err := os.Stat(nonROMSrc); err != nil {
+		t.Fatalf("expected non-rom file to remain in root: %v", err)
+	}
+}

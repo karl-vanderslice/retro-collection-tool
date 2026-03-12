@@ -672,7 +672,7 @@ func firstROMInDir(dir string) (string, error) {
 
 func isROMExt(ext string) bool {
 	switch ext {
-	case ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".sms", ".md", ".gen", ".pce", ".bin", ".chd", ".cue", ".iso", ".zip":
+	case ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".sms", ".gg", ".md", ".gen", ".32x", ".pce", ".sgx", ".bin", ".chd", ".cue", ".iso", ".zip", ".z64", ".n64", ".v64", ".ngp", ".ngc", ".rom", ".mx1", ".mx2", ".dsk", ".cas":
 		return true
 	default:
 		return false

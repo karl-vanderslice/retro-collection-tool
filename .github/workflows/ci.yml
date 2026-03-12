@@ -41,3 +41,26 @@ jobs:
           name: retro-collection-tool-linux-amd64
           path: bin/retro-collection-tool
           if-no-files-found: error
+
+  docs-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Enable Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v7
+
+      - name: Deploy MkDocs to GitHub Pages
+        run: nix develop path:. --accept-flake-config -c mkdocs gh-deploy --force

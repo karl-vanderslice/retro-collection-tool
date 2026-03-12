@@ -58,3 +58,26 @@ Hacks do not require DAT files. The hacks workflow uses `rompatcherjs` and appli
 BIOS, ReDump, and Arcade are currently feature-gated stubs and do not require per-system DAT keys yet.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
+
+### No-Intro Mapping Reference
+
+The default config maps the following No-Intro folder names to internal system keys and ROMM slugs:
+
+| No-Intro Folder                                     | System Key           | ROMM Slug            |
+| --------------------------------------------------- | -------------------- | -------------------- |
+| Microsoft - MSX                                     | msx                  | msx                  |
+| Microsoft - MSX2                                    | msx2                 | msx2                 |
+| NEC - PC Engine - TurboGrafx-16                     | tg16                 | tg16                 |
+| NEC - PC Engine SuperGrafx                          | supergrafx           | supergrafx           |
+| Nintendo - Game Boy                                 | gb                   | gb                   |
+| Nintendo - Game Boy Advance                         | gba                  | gba                  |
+| Nintendo - Game Boy Color                           | gbc                  | gbc                  |
+| Nintendo - Nintendo 64 (BigEndian)                  | n64                  | n64                  |
+| Nintendo - Nintendo Entertainment System (Headered) | nes                  | nes                  |
+| Nintendo - Super Nintendo Entertainment System      | snes                 | snes                 |
+| SNK - NeoGeo Pocket                                 | neo-geo-pocket       | neo-geo-pocket       |
+| SNK - NeoGeo Pocket Color                           | neo-geo-pocket-color | neo-geo-pocket-color |
+| Sega - 32X                                          | sega32               | sega32               |
+| Sega - Game Gear                                    | gamegear             | gamegear             |
+| Sega - Master System - Mark III                     | sms                  | sms                  |
+| Sega - Mega Drive - Genesis                         | genesis              | genesis              |

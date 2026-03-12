@@ -86,4 +86,8 @@ GitHub Actions runs on push/PR to `master` and executes:
 - `make test`
 - `make build`
 
+On pushes to `master` after a successful build, CI also runs:
+
+- `mkdocs gh-deploy --force`
+
 It uploads `bin/retro-collection-tool` as a build artifact. No release tagging/publishing is performed.

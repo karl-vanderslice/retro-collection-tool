@@ -37,6 +37,8 @@ If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-t
 
 All paths are relative to `root` unless absolute.
 
+`paths.hacks_source` can be set to an absolute path (for example `/mnt/media-emulation/RetroLibrary/roms/Hacks`) to keep curated hacks outside the active merge root.
+
 ## Systems
 
 Each system includes:
@@ -48,10 +50,11 @@ Each system includes:
 Optional overrides:
 
 - `retail_dat_pattern`
-- `hack_dat_pattern`
 
-If override keys are omitted, `dat_pattern` is used for both workflows.
+If `retail_dat_pattern` is omitted, `dat_pattern` is used for retail sync.
+
+Hacks do not require DAT files. The hacks workflow uses `rompatcherjs` and applies all discovered patch files in sorted filename order.
 
 BIOS, ReDump, and Arcade are currently feature-gated stubs and do not require per-system DAT keys yet.
 
-DAT selection always picks the latest matching `.dat` by modification time.
+Retail DAT selection always picks the latest matching `.dat` by modification time.

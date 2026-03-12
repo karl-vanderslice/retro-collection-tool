@@ -17,7 +17,7 @@ paths:
   to_sort: roms/ToSort
   romm_library_roms: roms/Library/roms
   romm_library_bios: roms/Library/bios
-  hacks_source: roms/Hacks
+  hacks_source: /mnt/media-emulation/RetroLibrary/roms/Hacks
   dats_no_intro_1g1r: dats/Fresh1G1R/PropeR-No-Intro
   dats_no_intro_raw: dats/NoIntro/NoIntro/No-Intro
   dats_redump_1g1r: dats/Fresh1G1R/PropeR-Redump

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -27,6 +28,23 @@ const (
 )
 
 var regionGroupRe = regexp.MustCompile(`\([^)]*\)`)
+
+var patchExtensions = map[string]bool{
+	".aps":     true,
+	".bps":     true,
+	".bdf":     true,
+	".bspatch": true,
+	".dps":     true,
+	".ebp":     true,
+	".ips":     true,
+	".ips32":   true,
+	".mod":     true,
+	".ppf":     true,
+	".rup":     true,
+	".ups":     true,
+	".vcdiff":  true,
+	".xdelta":  true,
+}
 
 type globalFlags struct {
 	configPath string
@@ -73,7 +91,7 @@ func Run(args []string) error {
 	case "sync":
 		return runSync(ctx, cfg, runner, globals, rest[1:])
 	case "hacks":
-		return runHacks(ctx, cfg, runner, globals, rest[1:])
+		return runHacks(ctx, cfg, globals, rest[1:])
 	case "bios":
 		return runBiosStub(cfg)
 	case "redump":
@@ -299,7 +317,7 @@ type hacksFlags struct {
 	noMoveRetail bool
 }
 
-func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, args []string) error {
+func runHacks(ctx context.Context, cfg *config.Config, g globalFlags, args []string) error {
 	var hf hacksFlags
 	fs := flag.NewFlagSet("hacks", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -319,14 +337,14 @@ func runHacks(ctx context.Context, cfg *config.Config, runner *igir.Runner, g gl
 	}
 
 	for _, system := range systems {
-		if err := runHacksSystem(ctx, cfg, runner, g, system, !hf.noMoveRetail); err != nil {
+		if err := runHacksSystem(ctx, cfg, g, system, !hf.noMoveRetail); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner, g globalFlags, system string, moveRetail bool) error {
+func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, system string, moveRetail bool) error {
 	sysCfg := cfg.Systems[system]
 	systemHacksDir := filepath.Join(cfg.ResolvePath(cfg.Paths.HacksSource), system)
 	if _, statErr := os.Stat(systemHacksDir); os.IsNotExist(statErr) {
@@ -340,15 +358,6 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 
 	baseOutput := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
 	if err := fsutil.EnsureDir(baseOutput); err != nil {
-		return err
-	}
-
-	hackPattern := sysCfg.EffectiveHackDatPattern()
-	if hackPattern == "" {
-		return fmt.Errorf("system %s has no hack DAT pattern configured", system)
-	}
-	datPath, err := fsutil.FindLatestDAT(cfg.ResolvePath(cfg.Paths.DatsNoIntroRaw), hackPattern)
-	if err != nil {
 		return err
 	}
 
@@ -386,26 +395,34 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			return err
 		}
 
-		cachePath := filepath.Join(resolveCacheRoot(cfg), cfg.Igir.CacheHacksFile)
-		args := []string{
-			"copy",
-			"--dat", datPath,
-			"--input", inDir,
-			"--patch", patchDir,
-			"--output", outDir,
-			"--patch-only",
-			"--overwrite-invalid",
-			"--cache-path", cachePath,
+		patchFiles, err := collectPatchFiles(patchDir)
+		if err != nil {
+			return err
 		}
-		if g.verbose {
-			fmt.Printf("[hacks:%s] processing %s with dat=%s\n", system, hackName, datPath)
-		}
-		if g.dryRun {
-			gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
-			if err != nil {
-				return err
+		if len(patchFiles) == 0 {
+			if g.verbose {
+				fmt.Printf("[hacks:%s] no patch files in %s, skipping\n", system, hackName)
 			}
+			continue
+		}
+
+		baseROM, err := firstROMInDir(inDir)
+		if err != nil {
+			return fmt.Errorf("hack %s has no base ROM file: %w", hackName, err)
+		}
+
+		if g.verbose {
+			fmt.Printf("[hacks:%s] processing %s with rompatcher (%d patches)\n", system, hackName, len(patchFiles))
+		}
+
+		gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
+		if err != nil {
+			return err
+		}
+
+		if g.dryRun {
 			fmt.Printf("[dry-run] target hack path %s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
+			logPatchPlan(baseROM, patchFiles)
 			if moveRetail {
 				if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
 					return err
@@ -413,19 +430,10 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, runner *igir.Runner
 			} else {
 				fmt.Println("[dry-run] retail move disabled (--no-move-retail)")
 			}
-			fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
 			continue
 		}
-		if err := runner.Run(ctx, args); err != nil {
-			return err
-		}
 
-		patched, err := firstPatchedROMInDir(outDir)
-		if err != nil {
-			return fmt.Errorf("hack %s produced no output: %w", hackName, err)
-		}
-
-		gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
+		patched, err := runPatchSequence(ctx, workRoot, baseROM, patchFiles, g.verbose)
 		if err != nil {
 			return err
 		}
@@ -463,7 +471,7 @@ func stageHackFiles(srcDir, inDir, patchDir string) error {
 		switch ext {
 		case ".zip":
 			return nil
-		case ".ips", ".bps", ".ups", ".xdelta":
+		case ".aps", ".bps", ".bdf", ".bspatch", ".dps", ".ebp", ".ips", ".ips32", ".mod", ".ppf", ".rup", ".ups", ".vcdiff", ".xdelta":
 			return fsutil.CopyFile(path, filepath.Join(patchDir, filepath.Base(path)))
 		default:
 			return fsutil.CopyFile(path, filepath.Join(inDir, filepath.Base(path)))
@@ -471,22 +479,107 @@ func stageHackFiles(srcDir, inDir, patchDir string) error {
 	})
 }
 
-func firstPatchedROMInDir(dir string) (string, error) {
-	if rom, err := firstROMInDir(dir); err == nil {
-		return rom, nil
-	}
-
-	entries, err := os.ReadDir(dir)
+func collectPatchFiles(patchDir string) ([]string, error) {
+	entries, err := os.ReadDir(patchDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		return filepath.Join(dir, e.Name()), nil
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		if !patchExtensions[ext] {
+			continue
+		}
+		paths = append(paths, filepath.Join(patchDir, e.Name()))
 	}
-	return "", errors.New("no file found")
+	sort.Slice(paths, func(i, j int) bool {
+		return strings.ToLower(filepath.Base(paths[i])) < strings.ToLower(filepath.Base(paths[j]))
+	})
+	return paths, nil
+}
+
+func logPatchPlan(baseROM string, patchFiles []string) {
+	current := filepath.Base(baseROM)
+	for i, patch := range patchFiles {
+		fmt.Printf("[dry-run] patch step %d: %s <= %s\n", i+1, current, filepath.Base(patch))
+		current = fmt.Sprintf("%s (patched)", current)
+	}
+}
+
+func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles []string, verbose bool) (string, error) {
+	current := baseROM
+	for i, patch := range patchFiles {
+		stepDir := filepath.Join(workRoot, "sequence", fmt.Sprintf("%03d", i+1))
+		if err := fsutil.RemoveIfExists(stepDir); err != nil {
+			return "", err
+		}
+		if err := fsutil.EnsureDir(stepDir); err != nil {
+			return "", err
+		}
+
+		romForStep := filepath.Join(stepDir, filepath.Base(current))
+		if err := fsutil.CopyFile(current, romForStep); err != nil {
+			return "", err
+		}
+		patchForStep := filepath.Join(stepDir, filepath.Base(patch))
+		if err := fsutil.CopyFile(patch, patchForStep); err != nil {
+			return "", err
+		}
+
+		cmdArgs := []string{"--yes", "rom-patcher", "patch", romForStep, patchForStep, "-s"}
+		if verbose {
+			fmt.Printf("[hacks] rompatcher step %d: npx %s\n", i+1, strings.Join(cmdArgs, " "))
+		}
+		cmd := exec.CommandContext(ctx, "npx", cmdArgs...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return "", fmt.Errorf("rompatcher step %d failed: %w", i+1, err)
+		}
+
+		nextROM, err := newestROMFile(stepDir)
+		if err != nil {
+			return "", fmt.Errorf("rompatcher step %d: %w", i+1, err)
+		}
+		current = nextROM
+	}
+	return current, nil
+}
+
+func newestROMFile(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	var newestPath string
+	var newestMod int64
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		if patchExtensions[ext] {
+			continue
+		}
+		if !isROMExt(ext) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			return "", err
+		}
+		if newestPath == "" || info.ModTime().UnixNano() > newestMod {
+			newestPath = filepath.Join(dir, e.Name())
+			newestMod = info.ModTime().UnixNano()
+		}
+	}
+	if newestPath == "" {
+		return "", errors.New("no patched ROM output produced")
+	}
+	return newestPath, nil
 }
 
 func unzipInto(zipPath, dstRoot string) error {
@@ -552,12 +645,20 @@ func firstROMInDir(dir string) (string, error) {
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(e.Name()))
-		switch ext {
-		case ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".sms", ".md", ".gen", ".pce", ".bin", ".chd", ".cue", ".iso":
+		if isROMExt(ext) {
 			return filepath.Join(dir, e.Name()), nil
 		}
 	}
 	return "", errors.New("no base ROM found")
+}
+
+func isROMExt(ext string) bool {
+	switch ext {
+	case ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".sms", ".md", ".gen", ".pce", ".bin", ".chd", ".cue", ".iso", ".zip":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeName(name string) string {

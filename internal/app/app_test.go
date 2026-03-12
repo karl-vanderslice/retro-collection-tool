@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -88,5 +89,31 @@ func TestResolveConfigPathsLayering(t *testing.T) {
 	}
 	if paths[0] != xdgCfg || paths[1] != projectCfg || paths[2] != override {
 		t.Fatalf("unexpected layering order: %#v", paths)
+	}
+}
+
+func TestCollectPatchFilesSorted(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := []string{"02-core.ups", "readme.txt", "01-base.ips", "03-polish.xdelta"}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	got, err := collectPatchFiles(dir)
+	if err != nil {
+		t.Fatalf("collectPatchFiles: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(dir, "01-base.ips"),
+		filepath.Join(dir, "02-core.ups"),
+		filepath.Join(dir, "03-polish.xdelta"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected patch order:\n got: %#v\nwant: %#v", got, want)
 	}
 }

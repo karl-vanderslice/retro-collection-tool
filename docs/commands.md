@@ -16,7 +16,9 @@ Applies curated patches from `roms/Hacks/<system>/<hack-name>/`.
 Safety flag:
 `--no-move-retail` keeps retail ROM files in place and only writes hack outputs.
 
-With global `--dry-run`, this command prints planned Igir patch invocations without writing files.
+With global `--dry-run`, this command prints the planned sequential patch chain without writing files.
+
+Patching is performed with `rompatcherjs` (`npx --yes rom-patcher`) and applies all patch files in filename order (`.ips`, `.bps`, `.ups`, `.xdelta`, and other supported formats).
 
 Hacks are now organized under the matched game directory when possible:
 `roms/Library/roms/<system>/<game>/hack/<hack-name>.<ext>`

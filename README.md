@@ -7,8 +7,9 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 - Config-driven workflows with strict validation.
 - Retail sync via hardlinks using latest matching DAT.
 - Curated hacks flow that patches from `roms/Hacks/<system>/<hack-name>/` and writes ROMM-compatible output.
+- BIOS import workflow with strict catalog-based filename and MD5 matching.
 - Export selected systems to an SD card destination.
-- Explicit feature-flagged stubs for BIOS, ReDump, and Arcade.
+- Explicit feature-flagged stubs for ReDump and Arcade.
 
 ## Quick Start
 
@@ -34,7 +35,7 @@ Set library root safely outside repo config using either:
 - `cache clean|path`
 - `bootstrap`
 - `systems`
-- `bios` (stub)
+- `bios`
 - `redump` (stub)
 - `arcade` (stub)
 

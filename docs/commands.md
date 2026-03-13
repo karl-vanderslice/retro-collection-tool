@@ -42,6 +42,28 @@ Examples:
 
 `retro-collection-tool --dry-run clean --all-systems --include-bios`
 
+## bios
+
+Imports BIOS files into ROMM Structure A targets:
+`roms/Library/bios/<platform>/...`
+
+The BIOS workflow is feature-gated by `features.enable_bios` and uses strict known-file matching from a BIOS catalog.
+
+- Matching requires both filename and MD5 hash from the catalog.
+- Unknown files are skipped and reported.
+- Source roots can include raw files and zip packs.
+
+Flags:
+
+- `--systems <csv>` or `--all-systems`
+- `--strict` to fail when required BIOS entries are missing
+
+Examples:
+
+`retro-collection-tool bios --systems gba,gbc`
+
+`retro-collection-tool --dry-run bios --all-systems --strict`
+
 ## export
 
 Copies selected systems to another destination (for SD cards).

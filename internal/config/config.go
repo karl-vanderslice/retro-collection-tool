@@ -15,6 +15,7 @@ type Config struct {
 	Root      string                   `yaml:"root"`
 	CacheDir  string                   `yaml:"cache_dir"`
 	Igir      IgirConfig               `yaml:"igir"`
+	Bios      BiosConfig               `yaml:"bios"`
 	Paths     PathsConfig              `yaml:"paths"`
 	Systems   map[string]SystemConfig  `yaml:"systems"`
 	Features  FeatureToggles           `yaml:"features"`
@@ -35,6 +36,7 @@ type IgirConfig struct {
 
 type PathsConfig struct {
 	VaultNoIntro    string `yaml:"vault_no_intro"`
+	VaultBios       string `yaml:"vault_bios"`
 	VaultRedump     string `yaml:"vault_redump"`
 	ToSort          string `yaml:"to_sort"`
 	RommLibraryRoms string `yaml:"romm_library_roms"`
@@ -58,6 +60,11 @@ type FeatureToggles struct {
 	EnableBios   bool `yaml:"enable_bios"`
 	EnableRedump bool `yaml:"enable_redump"`
 	EnableArcade bool `yaml:"enable_arcade"`
+}
+
+type BiosConfig struct {
+	CatalogFile string   `yaml:"catalog_file"`
+	SourceRoots []string `yaml:"source_roots"`
 }
 
 type BootstrapDirectoryLayout struct {

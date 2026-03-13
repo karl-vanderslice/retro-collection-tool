@@ -93,7 +93,7 @@ func Run(args []string) error {
 	case "hacks":
 		return runHacks(ctx, cfg, globals, rest[1:])
 	case "bios":
-		return runBiosStub(cfg)
+		return runBios(cfg, globals, rest[1:])
 	case "redump":
 		return runRedumpStub(cfg)
 	case "arcade":
@@ -891,13 +891,6 @@ func isRegionGroup(content string) bool {
 	return false
 }
 
-func runBiosStub(cfg *config.Config) error {
-	if !cfg.Features.EnableBios {
-		return errors.New("bios workflow disabled in config.features.enable_bios")
-	}
-	return errors.New("bios workflow is stubbed; implementation planned in next phase")
-}
-
 func runRedumpStub(cfg *config.Config) error {
 	if !cfg.Features.EnableRedump {
 		return errors.New("redump workflow disabled in config.features.enable_redump")
@@ -1094,7 +1087,7 @@ Commands:
   sync        Run retail sync with Igir
   hacks       Run curated ROM hacks patch workflow
 	clean       Remove target output directories for selected systems
-  bios        BIOS workflow (stub)
+	bios        BIOS import workflow with strict hash matching
   redump      ReDump workflow (stub)
   arcade      Arcade workflow (stub)
   export      Copy selected ROMM systems to destination (e.g., SD card)

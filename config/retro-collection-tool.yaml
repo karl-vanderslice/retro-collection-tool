@@ -11,8 +11,15 @@ igir:
   allow_compression_zip: true
   retail_base_args: []
 
+bios:
+  catalog_file: config/bios-catalog.yaml
+  source_roots:
+    - bios
+    - roms/Vault/BIOS
+
 paths:
   vault_no_intro: roms/Vault/NoIntro/NoIntro
+  vault_bios: roms/Vault/BIOS
   vault_redump: roms/Vault/ReDump/ReDump
   to_sort: roms/ToSort
   romm_library_roms: roms/Library/roms

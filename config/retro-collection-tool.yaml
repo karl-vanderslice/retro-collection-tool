@@ -31,8 +31,8 @@ paths:
   media_root: media
 
 features:
-  enable_bios: false
-  enable_redump: false
+  enable_bios: true
+  enable_redump: true
   enable_arcade: false
 
 systems:
@@ -101,6 +101,41 @@ systems:
     enabled: true
     romm_slug: tg16
     dat_pattern: NEC - PC Engine - TurboGrafx-16
+  dreamcast:
+    enabled: true
+    romm_slug: dreamcast
+    retail_dat_source: redump
+    retail_dat_pattern: Sega - Dreamcast
+  gamecube:
+    enabled: true
+    romm_slug: gamecube
+    retail_dat_source: redump
+    retail_dat_pattern: Nintendo - GameCube
+  psx:
+    enabled: true
+    romm_slug: psx
+    retail_dat_source: redump
+    retail_dat_pattern: Sony - PlayStation
+  ps2:
+    enabled: true
+    romm_slug: ps2
+    retail_dat_source: redump
+    retail_dat_pattern: Sony - PlayStation 2
+  saturn:
+    enabled: true
+    romm_slug: saturn
+    retail_dat_source: redump
+    retail_dat_pattern: Sega - Saturn
+  wii:
+    enabled: true
+    romm_slug: wii
+    retail_dat_source: redump
+    retail_dat_pattern: Nintendo - Wii
+  xbox:
+    enabled: true
+    romm_slug: xbox
+    retail_dat_source: redump
+    retail_dat_pattern: Microsoft - Xbox
 
 bootstrap:
   romm_roms:
@@ -120,6 +155,13 @@ bootstrap:
     - snes
     - supergrafx
     - tg16
+    - dreamcast
+    - gamecube
+    - psx
+    - ps2
+    - saturn
+    - wii
+    - xbox
   romm_bios:
     - gb
     - gba
@@ -137,3 +179,10 @@ bootstrap:
     - snes
     - supergrafx
     - tg16
+    - dreamcast
+    - gamecube
+    - psx
+    - ps2
+    - saturn
+    - wii
+    - xbox

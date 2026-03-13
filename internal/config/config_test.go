@@ -109,6 +109,53 @@ func TestSystemConfigEffectiveDatPattern_Overrides(t *testing.T) {
 	}
 }
 
+func TestSystemConfigEffectiveRetailDatSource_Default(t *testing.T) {
+	t.Parallel()
+
+	s := SystemConfig{}
+	if got := s.EffectiveRetailDatSource(); got != RetailDatSourceNoIntro {
+		t.Fatalf("retail source default mismatch: %q", got)
+	}
+}
+
+func TestSystemConfigEffectiveRetailDatSource_Override(t *testing.T) {
+	t.Parallel()
+
+	s := SystemConfig{RetailDatSource: "ReDump"}
+	if got := s.EffectiveRetailDatSource(); got != RetailDatSourceRedump {
+		t.Fatalf("retail source override mismatch: %q", got)
+	}
+}
+
+func TestLoadMergedRejectsUnknownRetailDatSource(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	cfgYAML := strings.Join([]string{
+		"root: /tmp/root",
+		"cache_dir: cache",
+		"paths:",
+		"  romm_library_roms: roms/Library/roms",
+		"  hacks_source: roms/Hacks",
+		"systems:",
+		"  psx:",
+		"    enabled: true",
+		"    romm_slug: psx",
+		"    retail_dat_source: invalid-source",
+		"    retail_dat_pattern: Sony - PlayStation",
+		"",
+	}, "\n")
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadMerged([]string{cfgPath}, EnvOverrides{})
+	if err == nil {
+		t.Fatal("expected validation error for invalid retail_dat_source")
+	}
+}
+
 func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 	t.Parallel()
 
@@ -206,6 +253,59 @@ func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 		}
 		if sysCfg.DatPattern != tc.datPattern {
 			t.Fatalf("dat pattern mismatch for %q: got %q want %q", key, sysCfg.DatPattern, tc.datPattern)
+		}
+	}
+
+	redumpSystems := map[string]struct {
+		rommSlug string
+		pattern  string
+	}{
+		"dreamcast": {
+			rommSlug: "dreamcast",
+			pattern:  "Sega - Dreamcast",
+		},
+		"gamecube": {
+			rommSlug: "gamecube",
+			pattern:  "Nintendo - GameCube",
+		},
+		"psx": {
+			rommSlug: "psx",
+			pattern:  "Sony - PlayStation",
+		},
+		"ps2": {
+			rommSlug: "ps2",
+			pattern:  "Sony - PlayStation 2",
+		},
+		"saturn": {
+			rommSlug: "saturn",
+			pattern:  "Sega - Saturn",
+		},
+		"wii": {
+			rommSlug: "wii",
+			pattern:  "Nintendo - Wii",
+		},
+		"xbox": {
+			rommSlug: "xbox",
+			pattern:  "Microsoft - Xbox",
+		},
+	}
+
+	for key, tc := range redumpSystems {
+		sysCfg, ok := cfg.Systems[key]
+		if !ok {
+			t.Fatalf("missing system %q in default config", key)
+		}
+		if !sysCfg.Enabled {
+			t.Fatalf("expected system %q to be enabled", key)
+		}
+		if sysCfg.RommSlug != tc.rommSlug {
+			t.Fatalf("romm slug mismatch for %q: got %q want %q", key, sysCfg.RommSlug, tc.rommSlug)
+		}
+		if sysCfg.EffectiveRetailDatPattern() != tc.pattern {
+			t.Fatalf("retail dat pattern mismatch for %q: got %q want %q", key, sysCfg.EffectiveRetailDatPattern(), tc.pattern)
+		}
+		if sysCfg.EffectiveRetailDatSource() != RetailDatSourceRedump {
+			t.Fatalf("retail dat source mismatch for %q: got %q want %q", key, sysCfg.EffectiveRetailDatSource(), RetailDatSourceRedump)
 		}
 	}
 }

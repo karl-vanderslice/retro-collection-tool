@@ -109,3 +109,52 @@ entries:
     sources:
       - name: syscard3.pce
         md5: 38179df8f4ac870017db21ebcbf53114
+
+  - system: psx
+    required: false
+    destination: scph5500.bin
+    sources:
+      - name: scph5500.bin
+        md5: 8dd7d5296a650fac7319bce665a6a53c
+
+  - system: psx
+    required: false
+    destination: scph5501.bin
+    sources:
+      - name: scph5501.bin
+        md5: 490f666e1afb15b7362b406ed1cea246
+
+  - system: psx
+    required: false
+    destination: scph5502.bin
+    sources:
+      - name: scph5502.bin
+        md5: 32736f17079d0b2b7024407c39bd3050
+
+  - system: psx
+    required: false
+    destination: PSXONPSP660.bin
+    sources:
+      - name: PSXONPSP660.bin
+        md5: c53ca5908936d412331790f4426c6c33
+
+  - system: dreamcast
+    required: false
+    destination: dc_boot.bin
+    sources:
+      - name: dc_boot.bin
+        md5: e10c53c2f8b90bab96ead2d368858623
+
+  - system: saturn
+    required: false
+    destination: sega_101.bin
+    sources:
+      - name: sega_101.bin
+        md5: 85ec9ca47d8f6807718151cbcca8b964
+
+  - system: saturn
+    required: false
+    destination: mpr-17933.bin
+    sources:
+      - name: mpr-17933.bin
+        md5: 3240872c70984b6cbfda1586cab68dbe

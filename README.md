@@ -5,7 +5,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 ## Highlights
 
 - Config-driven workflows with strict validation.
-- Retail sync via hardlinks using latest matching DAT.
+- Retail sync via hardlinks using latest matching DAT from No-Intro or ReDump.
 - Curated hacks flow that patches from `roms/Hacks/<system>/<hack-name>/` and writes ROMM-compatible output.
 - BIOS import workflow with strict catalog-based filename and MD5 matching.
 - Export selected systems to an SD card destination.
@@ -55,7 +55,7 @@ Then `RETRO_COLLECTION_TOOL_ROOT` overrides `root`.
 - `root` should come from your user XDG config or `RETRO_COLLECTION_TOOL_ROOT`.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
-- Default enabled systems: `gb`, `gba`, `gbc`, `gamegear`, `genesis`, `msx`, `msx2`, `n64`, `nes`, `neo-geo-pocket`, `neo-geo-pocket-color`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`.
+- Default enabled systems: `gb`, `gba`, `gbc`, `gamegear`, `genesis`, `msx`, `msx2`, `n64`, `nes`, `neo-geo-pocket`, `neo-geo-pocket-color`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`, `dreamcast`, `gamecube`, `psx`, `ps2`, `saturn`, `wii`, `xbox`.
 
 If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool`.
 

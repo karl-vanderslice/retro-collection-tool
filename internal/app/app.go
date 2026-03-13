@@ -268,6 +268,15 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 	}
 
 	datDir := cfg.ResolvePath(cfg.Paths.DatsNoIntro1G1R)
+	inputRoot := cfg.ResolvePath(cfg.Paths.VaultNoIntro)
+	source := sysCfg.EffectiveRetailDatSource()
+	if source == config.RetailDatSourceRedump {
+		if !cfg.Features.EnableRedump {
+			return fmt.Errorf("system %s requires redump, but config.features.enable_redump is false", system)
+		}
+		datDir = cfg.ResolvePath(cfg.Paths.DatsRedump1G1R)
+		inputRoot = cfg.ResolvePath(cfg.Paths.VaultRedump)
+	}
 	retailPattern := sysCfg.EffectiveRetailDatPattern()
 	if retailPattern == "" {
 		return fmt.Errorf("system %s has no retail DAT pattern configured", system)
@@ -284,7 +293,7 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 
 	args := []string{"link", "playlist", "clean", "--dat", datPath}
 	args = append(args,
-		"--input", cfg.ResolvePath(cfg.Paths.VaultNoIntro),
+		"--input", inputRoot,
 		"--input", rommDir,
 		"--output", rommDir,
 		"--clean-exclude", "hack/**",
@@ -319,6 +328,7 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 	}
 	if g.verbose {
 		fmt.Printf("[sync:%s] dat=%s output=%s\n", system, datPath, rommDir)
+		fmt.Printf("[sync:%s] retail source=%s input=%s\n", system, source, inputRoot)
 	}
 	if g.dryRun {
 		fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
@@ -1039,6 +1049,7 @@ func runBootstrap(cfg *config.Config) error {
 		cfg.ResolvePath(cfg.Paths.HacksSource),
 		cfg.ResolvePath(cfg.Paths.ToSort),
 		cfg.ResolvePath(cfg.Paths.VaultNoIntro),
+		cfg.ResolvePath(cfg.Paths.VaultRedump),
 		cfg.ResolvePath(cfg.CacheDir),
 	}
 	for _, d := range dirs {

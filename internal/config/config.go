@@ -51,10 +51,16 @@ type PathsConfig struct {
 type SystemConfig struct {
 	Enabled          bool   `yaml:"enabled"`
 	RommSlug         string `yaml:"romm_slug"`
+	RetailDatSource  string `yaml:"retail_dat_source"`
 	DatPattern       string `yaml:"dat_pattern"`
 	RetailDatPattern string `yaml:"retail_dat_pattern"`
 	HackDatPattern   string `yaml:"hack_dat_pattern"`
 }
+
+const (
+	RetailDatSourceNoIntro = "nointro"
+	RetailDatSourceRedump  = "redump"
+)
 
 type FeatureToggles struct {
 	EnableBios   bool `yaml:"enable_bios"`
@@ -149,12 +155,29 @@ func (c *Config) Validate() error {
 		return errors.New("config.systems must define at least one system")
 	}
 
+	usesRedump := false
 	for k, v := range c.Systems {
 		if strings.TrimSpace(v.RommSlug) == "" {
 			return fmt.Errorf("config.systems.%s.romm_slug is required", k)
 		}
+		source := v.EffectiveRetailDatSource()
+		if source != RetailDatSourceNoIntro && source != RetailDatSourceRedump {
+			return fmt.Errorf("config.systems.%s.retail_dat_source must be one of: %s, %s", k, RetailDatSourceNoIntro, RetailDatSourceRedump)
+		}
+		if source == RetailDatSourceRedump {
+			usesRedump = true
+		}
 		if strings.TrimSpace(v.DatPattern) == "" && strings.TrimSpace(v.RetailDatPattern) == "" && strings.TrimSpace(v.HackDatPattern) == "" {
 			return fmt.Errorf("config.systems.%s requires dat_pattern or retail_dat_pattern or hack_dat_pattern", k)
+		}
+	}
+
+	if usesRedump {
+		if strings.TrimSpace(c.Paths.DatsRedump1G1R) == "" {
+			return errors.New("config.paths.dats_redump_1g1r is required when any system uses retail_dat_source=redump")
+		}
+		if strings.TrimSpace(c.Paths.VaultRedump) == "" {
+			return errors.New("config.paths.vault_redump is required when any system uses retail_dat_source=redump")
 		}
 	}
 	return nil
@@ -165,6 +188,13 @@ func (s SystemConfig) EffectiveRetailDatPattern() string {
 		return p
 	}
 	return strings.TrimSpace(s.DatPattern)
+}
+
+func (s SystemConfig) EffectiveRetailDatSource() string {
+	if source := strings.ToLower(strings.TrimSpace(s.RetailDatSource)); source != "" {
+		return source
+	}
+	return RetailDatSourceNoIntro
 }
 
 func (s SystemConfig) EffectiveHackDatPattern() string {

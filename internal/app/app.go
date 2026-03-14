@@ -51,6 +51,7 @@ type globalFlags struct {
 	dryRun     bool
 	verbose    bool
 	outputMode string
+	colorMode  string
 }
 
 func Run(args []string) error {
@@ -133,7 +134,9 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	fs.BoolVar(&g.dryRun, "dry-run", false, "print planned actions without making changes")
 	fs.BoolVar(&g.verbose, "verbose", false, "verbose logs")
 	fs.StringVar(&g.outputMode, "output", outputModeHuman, "output mode: human|json")
+	fs.StringVar(&g.colorMode, "color", colorModeAuto, "color mode: auto|always|never")
 	jsonFlag := fs.Bool("json", false, "shorthand for --output json")
+	noColorFlag := fs.Bool("no-color", false, "shorthand for --color never")
 
 	if err := fs.Parse(args); err != nil {
 		return g, nil, err
@@ -141,12 +144,22 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	if *jsonFlag {
 		g.outputMode = outputModeJSON
 	}
+	if *noColorFlag {
+		g.colorMode = colorModeNever
+	}
 	g.outputMode = strings.ToLower(strings.TrimSpace(g.outputMode))
 	if g.outputMode == "" {
 		g.outputMode = outputModeHuman
 	}
 	if g.outputMode != outputModeHuman && g.outputMode != outputModeJSON {
 		return g, nil, fmt.Errorf("invalid --output mode %q (supported: human,json)", g.outputMode)
+	}
+	g.colorMode = strings.ToLower(strings.TrimSpace(g.colorMode))
+	if g.colorMode == "" {
+		g.colorMode = colorModeAuto
+	}
+	if g.colorMode != colorModeAuto && g.colorMode != colorModeAlways && g.colorMode != colorModeNever {
+		return g, nil, fmt.Errorf("invalid --color mode %q (supported: auto,always,never)", g.colorMode)
 	}
 	return g, fs.Args(), nil
 }
@@ -426,9 +439,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 	sysCfg := cfg.Systems[system]
 	systemHacksDir := filepath.Join(cfg.ResolvePath(cfg.Paths.HacksSource), system)
 	if _, statErr := os.Stat(systemHacksDir); os.IsNotExist(statErr) {
-		if g.verbose {
-			fmt.Printf("[hacks] [build] system=%s no hacks directory, skipping\n", system)
-		}
+		emitVerbose(g, "hacks", "build", "no hacks directory, skipping", outputFields{"system": system})
 		return nil
 	} else if statErr != nil {
 		return statErr
@@ -474,9 +485,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 			return err
 		}
 		if len(patchFiles) == 0 {
-			if g.verbose {
-				fmt.Printf("[hacks] [build] system=%s no patch files in %s, skipping\n", system, hackName)
-			}
+			emitVerbose(g, "hacks", "build", "no patch files, skipping", outputFields{"system": system, "hack": hackName})
 			continue
 		}
 
@@ -485,9 +494,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 			return fmt.Errorf("hack %s has no base ROM file: %w", hackName, err)
 		}
 
-		if g.verbose {
-			fmt.Printf("[hacks] [build] system=%s processing=%s patches=%d\n", system, hackName, len(patchFiles))
-		}
+		emitVerbose(g, "hacks", "build", "processing hack", outputFields{"system": system, "hack": hackName, "patches": len(patchFiles)})
 
 		gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
 		if err != nil {
@@ -495,19 +502,19 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		}
 
 		if g.dryRun {
-			fmt.Printf("[hacks] [build] dry-run target=%s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
-			logPatchPlan(baseROM, patchFiles)
+			emitInfo(g, "hacks", "build", "dry-run target", outputFields{"path": filepath.Join(gameDir, "hack", sanitizeName(hackName))})
+			logPatchPlan(g, baseROM, patchFiles)
 			if moveRetail {
-				if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
+				if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, g, true); err != nil {
 					return err
 				}
 			} else {
-				fmt.Println("[hacks] [build] dry-run retail move disabled (--no-move-retail)")
+				emitInfo(g, "hacks", "build", "retail move disabled", outputFields{"reason": "--no-move-retail"})
 			}
 			continue
 		}
 
-		patched, err := runPatchSequence(ctx, workRoot, baseROM, patchFiles, g.verbose)
+		patched, err := runPatchSequence(ctx, workRoot, baseROM, patchFiles, g)
 		if err != nil {
 			return err
 		}
@@ -520,11 +527,11 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		}
 
 		if moveRetail {
-			if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, false, g.verbose); err != nil {
+			if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, g, false); err != nil {
 				return err
 			}
 		} else if g.verbose {
-			fmt.Println("[hacks] [build] retail move disabled (--no-move-retail)")
+			emitInfo(g, "hacks", "build", "retail move disabled", outputFields{"reason": "--no-move-retail"})
 		}
 	}
 	return nil
@@ -575,15 +582,15 @@ func collectPatchFiles(patchDir string) ([]string, error) {
 	return paths, nil
 }
 
-func logPatchPlan(baseROM string, patchFiles []string) {
+func logPatchPlan(g globalFlags, baseROM string, patchFiles []string) {
 	current := filepath.Base(baseROM)
 	for i, patch := range patchFiles {
-		fmt.Printf("[hacks] [build] dry-run patch step=%d input=%s patch=%s\n", i+1, current, filepath.Base(patch))
+		emitInfo(g, "hacks", "build", "dry-run patch step", outputFields{"step": i + 1, "input": current, "patch": filepath.Base(patch)})
 		current = fmt.Sprintf("%s (patched)", current)
 	}
 }
 
-func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles []string, verbose bool) (string, error) {
+func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles []string, g globalFlags) (string, error) {
 	current := baseROM
 	for i, patch := range patchFiles {
 		stepDir := filepath.Join(workRoot, "sequence", fmt.Sprintf("%03d", i+1))
@@ -604,9 +611,7 @@ func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles 
 		}
 
 		cmdArgs := []string{"--yes", "rom-patcher", "patch", romForStep, patchForStep, "-s"}
-		if verbose {
-			fmt.Printf("[hacks] [build] rompatcher step=%d cmd=npx %s\n", i+1, strings.Join(cmdArgs, " "))
-		}
+		emitVerbose(g, "hacks", "build", "running patcher", outputFields{"step": i + 1, "cmd": "npx " + strings.Join(cmdArgs, " ")})
 		cmd := exec.CommandContext(ctx, "npx", cmdArgs...)
 		cmd.Dir = stepDir
 		cmd.Stdout = os.Stdout
@@ -752,10 +757,10 @@ func organizeSystemLayout(cfg *config.Config, g globalFlags, system string) erro
 	if err := fsutil.EnsureDir(root); err != nil {
 		return err
 	}
-	return organizeRetailFilesInRoot(root, g.dryRun, g.verbose)
+	return organizeRetailFilesInRoot(root, g)
 }
 
-func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
+func organizeRetailFilesInRoot(root string, g globalFlags) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
@@ -776,8 +781,8 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 		targetFile := filepath.Join(targetDir, name)
 		srcFile := filepath.Join(root, name)
 
-		if dryRun {
-			fmt.Printf("[organize] [retail] dry-run move %s -> %s\n", srcFile, targetFile)
+		if g.dryRun {
+			emitInfo(g, "organize", "retail", "dry-run move", outputFields{"from": srcFile, "to": targetFile})
 			continue
 		}
 
@@ -785,9 +790,7 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 			return err
 		}
 		if _, err := os.Stat(targetFile); err == nil {
-			if verbose {
-				fmt.Printf("[organize] [retail] skip existing %s\n", targetFile)
-			}
+			emitVerbose(g, "organize", "retail", "skip existing target", outputFields{"path": targetFile})
 			if err := os.Remove(srcFile); err != nil {
 				return fmt.Errorf("remove duplicate retail file %s: %w", srcFile, err)
 			}
@@ -796,9 +799,7 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 		if err := moveFile(srcFile, targetFile); err != nil {
 			return err
 		}
-		if verbose {
-			fmt.Printf("[organize] [retail] moved %s -> %s\n", srcFile, targetFile)
-		}
+		emitVerbose(g, "organize", "retail", "moved retail file", outputFields{"from": srcFile, "to": targetFile})
 	}
 	return nil
 }
@@ -825,7 +826,7 @@ func resolveHackGameDir(systemOutputRoot, hackInputDir, hackName string) (string
 	return filepath.Join(systemOutputRoot, sanitizeName(baseName)), baseKey, nil
 }
 
-func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun, verbose bool) error {
+func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, g globalFlags, dryRun bool) error {
 	entries, err := os.ReadDir(systemOutputRoot)
 	if err != nil {
 		return err
@@ -845,7 +846,7 @@ func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun,
 		dst := filepath.Join(gameDir, name)
 
 		if dryRun {
-			fmt.Printf("[hacks] [build] dry-run move retail %s -> %s\n", src, dst)
+			emitInfo(g, "hacks", "build", "dry-run move retail", outputFields{"from": src, "to": dst})
 			continue
 		}
 
@@ -855,9 +856,7 @@ func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun,
 		if err := moveFile(src, dst); err != nil {
 			return err
 		}
-		if verbose {
-			fmt.Printf("[hacks] [build] moved retail %s -> %s\n", src, dst)
-		}
+		emitVerbose(g, "hacks", "build", "moved retail", outputFields{"from": src, "to": dst})
 	}
 
 	return nil
@@ -1021,7 +1020,7 @@ func runClean(cfg *config.Config, g globalFlags, args []string) error {
 		sysCfg := cfg.Systems[s]
 		romTarget := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryRoms), sysCfg.RommSlug)
 		if g.dryRun {
-			fmt.Printf("[dry-run] remove %s\n", romTarget)
+			emitInfo(g, "clean", "plan", "remove ROM target", outputFields{"path": romTarget})
 		} else if err := fsutil.RemoveIfExists(romTarget); err != nil {
 			return err
 		}
@@ -1029,12 +1028,14 @@ func runClean(cfg *config.Config, g globalFlags, args []string) error {
 		if cf.includeBios {
 			biosTarget := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug)
 			if g.dryRun {
-				fmt.Printf("[dry-run] remove %s\n", biosTarget)
+				emitInfo(g, "clean", "plan", "remove BIOS target", outputFields{"path": biosTarget})
 			} else if err := fsutil.RemoveIfExists(biosTarget); err != nil {
 				return err
 			}
 		}
 	}
+
+	emitInfo(g, "clean", "", "summary", outputFields{"systems": len(systems), "include_bios": cf.includeBios, "dry_run": g.dryRun})
 
 	return nil
 }
@@ -1067,13 +1068,15 @@ func runExport(cfg *config.Config, g globalFlags, args []string) error {
 		dst := filepath.Join(dstRoot, sysCfg.RommSlug)
 
 		if g.dryRun {
-			fmt.Printf("[dry-run] export %s -> %s\n", src, dst)
+			emitInfo(g, "export", "plan", "copy system", outputFields{"from": src, "to": dst})
 			continue
 		}
 		if err := copyDirRecursive(src, dst); err != nil {
 			return err
 		}
+		emitVerbose(g, "export", "copy", "copied system", outputFields{"from": src, "to": dst})
 	}
+	emitInfo(g, "export", "", "summary", outputFields{"systems": len(systems), "destination": dstRoot, "dry_run": g.dryRun})
 	return nil
 }
 
@@ -1154,6 +1157,8 @@ Global flags:
   --dry-run             Plan-only mode
   --verbose             Verbose output
 	--output <mode>       Output mode: human|json (default: human)
+	--color <mode>        Color mode: auto|always|never (default: auto)
+	--no-color            Shorthand for --color never
 	--json                Shorthand for --output json
 
 Commands:

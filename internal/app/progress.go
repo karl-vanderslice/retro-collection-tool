@@ -20,6 +20,7 @@ type commandSpinner struct {
 	idx    int
 	done   chan struct{}
 	silent bool
+	color  bool
 }
 
 func newCommandSpinner(g globalFlags, prefix, phase, status string) *commandSpinner {
@@ -30,6 +31,7 @@ func newCommandSpinner(g globalFlags, prefix, phase, status string) *commandSpin
 		frames: []string{"-", "\\", "|", "/"},
 		done:   make(chan struct{}),
 		silent: g.isJSONOutput(),
+		color:  g.usesColor(),
 	}
 	if s.silent {
 		return s
@@ -37,7 +39,7 @@ func newCommandSpinner(g globalFlags, prefix, phase, status string) *commandSpin
 
 	s.active = stdoutIsTerminal()
 	if !s.active {
-		fmt.Printf("[%s] [%s] %s\n", s.prefix, s.phase, s.status)
+		fmt.Printf("%s %s\n", formatHumanPrefix(s.prefix, s.phase, "info", s.color), s.status)
 		return s
 	}
 
@@ -58,7 +60,7 @@ func (s *commandSpinner) run() {
 			s.idx++
 			status := truncateStatus(s.status, 96)
 			s.mu.Unlock()
-			fmt.Printf("\r\033[2K[%s] [%s] %s %s", s.prefix, s.phase, frame, status)
+			fmt.Printf("\r\033[2K%s %s %s", formatHumanPrefix(s.prefix, s.phase, "info", s.color), styleDim(frame, s.color), status)
 		}
 	}
 }
@@ -76,18 +78,20 @@ func (s *commandSpinner) Stop(ok bool, final string) {
 	if s.active {
 		close(s.done)
 		label := "done"
+		level := "info"
 		if !ok {
 			label = "fail"
+			level = "error"
 		}
-		fmt.Printf("\r\033[2K[%s] [%s] %s %s\n", s.prefix, s.phase, label, truncateStatus(strings.TrimSpace(final), 120))
+		fmt.Printf("\r\033[2K%s %s %s\n", formatHumanPrefix(s.prefix, s.phase, level, s.color), styleDim(label, s.color), truncateStatus(strings.TrimSpace(final), 120))
 		return
 	}
 
 	if ok {
-		fmt.Printf("[%s] [%s] done %s\n", s.prefix, s.phase, strings.TrimSpace(final))
+		fmt.Printf("%s %s %s\n", formatHumanPrefix(s.prefix, s.phase, "info", s.color), styleDim("done", s.color), strings.TrimSpace(final))
 		return
 	}
-	fmt.Printf("[%s] [%s] fail %s\n", s.prefix, s.phase, strings.TrimSpace(final))
+	fmt.Printf("%s %s %s\n", formatHumanPrefix(s.prefix, s.phase, "error", s.color), styleDim("fail", s.color), strings.TrimSpace(final))
 }
 
 func stdoutIsTerminal() bool {

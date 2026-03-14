@@ -243,16 +243,16 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 
 	if g.verbose {
 		for _, line := range summary.Imported {
-			fmt.Println(line)
+			emitInfo(g, "bios", "match", line, nil)
 		}
 		for _, line := range summary.Missing {
-			fmt.Println(line)
+			emitWarn(g, "bios", "match", line, nil)
 		}
 		for _, line := range summary.HashMismatches {
-			fmt.Println(line)
+			emitWarn(g, "bios", "match", line, nil)
 		}
 		for _, line := range summary.Unknown {
-			fmt.Println(line)
+			emitWarn(g, "bios", "match", line, nil)
 		}
 	} else if len(summary.Unknown) > 0 {
 		emitInfo(g, "bios", "match", "skipped unknown candidates", outputFields{"count": len(summary.Unknown), "hint": "use --verbose for details"})
@@ -374,7 +374,7 @@ func collectBiosCandidates(
 		info, err := os.Stat(root)
 		if os.IsNotExist(err) {
 			if verbose {
-				fmt.Printf("[bios] source root missing, skipping: %s\n", root)
+				emitInfo(globalFlags{verbose: true}, "bios", "scan", "source root missing, skipping", outputFields{"path": root})
 			}
 			continue
 		}
@@ -684,22 +684,22 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		}
 		if vaultMatch != nil {
 			if g.dryRun {
-				summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios link %s -> %s", vaultDst, libraryDst))
+				summary.Imported = append(summary.Imported, fmt.Sprintf("dry-run link vault=%s library=%s", vaultDst, libraryDst))
 			} else {
 				if err := fsutil.LinkOrCopy(vaultDst, libraryDst); err != nil {
 					return nil, err
 				}
-				summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] reused %s (linked %s)", vaultDst, libraryDst))
+				summary.Imported = append(summary.Imported, fmt.Sprintf("reused vault=%s linked=%s", vaultDst, libraryDst))
 			}
 			continue
 		}
 
 		match, mismatchedNames := findCatalogEntryMatch(entry, nameToCandidates)
 		if match == nil {
-			missingLine := fmt.Sprintf("[bios] missing %s/%s", sysCfg.RommSlug, libraryName)
+			missingLine := fmt.Sprintf("missing %s/%s", sysCfg.RommSlug, libraryName)
 			summary.Missing = append(summary.Missing, missingLine)
 			if entry.Required {
-				summary.RequiredMissing = append(summary.RequiredMissing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, libraryName))
+				summary.RequiredMissing = append(summary.RequiredMissing, fmt.Sprintf("missing required %s/%s", sysCfg.RommSlug, libraryName))
 			}
 			summary.HashMismatches = append(summary.HashMismatches, mismatchedNames...)
 			continue
@@ -707,7 +707,7 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 
 		usedCandidates[match.Display] = true
 		if g.dryRun {
-			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios import %s -> %s (link %s)", match.Display, vaultDst, libraryDst))
+			summary.Imported = append(summary.Imported, fmt.Sprintf("dry-run import source=%s vault=%s link=%s", match.Display, vaultDst, libraryDst))
 			continue
 		}
 
@@ -717,14 +717,14 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		if err := fsutil.LinkOrCopy(vaultDst, libraryDst); err != nil {
 			return nil, err
 		}
-		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] imported %s -> %s (linked %s)", match.Display, vaultDst, libraryDst))
+		summary.Imported = append(summary.Imported, fmt.Sprintf("imported source=%s vault=%s linked=%s", match.Display, vaultDst, libraryDst))
 	}
 
 	for _, c := range candidates {
 		if usedCandidates[c.Display] {
 			continue
 		}
-		summary.Unknown = append(summary.Unknown, fmt.Sprintf("[bios] skipped unknown %s", c.Display))
+		summary.Unknown = append(summary.Unknown, fmt.Sprintf("skipped unknown %s", c.Display))
 	}
 
 	return summary, nil
@@ -740,7 +740,7 @@ func findCatalogEntryMatch(entry biosCatalogEntry, byName map[string][]biosCandi
 				return &m, mismatches
 			}
 			if sourceHasHashes(src) {
-				mismatches = append(mismatches, fmt.Sprintf("[bios] hash mismatch for %s: got %s expected %s (%s)", src.Name, candidateHashSummary(candidate), sourceHashSummary(src), candidate.Display))
+				mismatches = append(mismatches, fmt.Sprintf("hash mismatch for %s: got %s expected %s (%s)", src.Name, candidateHashSummary(candidate), sourceHashSummary(src), candidate.Display))
 			}
 		}
 	}

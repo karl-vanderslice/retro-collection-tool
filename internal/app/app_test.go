@@ -128,7 +128,7 @@ func TestOrganizeRetailFilesInRootMovesIntoGameFolder(t *testing.T) {
 		t.Fatalf("write source rom: %v", err)
 	}
 
-	if err := organizeRetailFilesInRoot(root, false, false); err != nil {
+	if err := organizeRetailFilesInRoot(root, globalFlags{}); err != nil {
 		t.Fatalf("organizeRetailFilesInRoot: %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestOrganizeRetailFilesInRootDryRunDoesNotMove(t *testing.T) {
 		t.Fatalf("write source rom: %v", err)
 	}
 
-	if err := organizeRetailFilesInRoot(root, true, false); err != nil {
+	if err := organizeRetailFilesInRoot(root, globalFlags{dryRun: true}); err != nil {
 		t.Fatalf("organizeRetailFilesInRoot dry-run: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func TestOrganizeRetailFilesInRootSupportsExpandedSystemExtensions(t *testing.T)
 		t.Fatalf("write non-rom file: %v", err)
 	}
 
-	if err := organizeRetailFilesInRoot(root, false, false); err != nil {
+	if err := organizeRetailFilesInRoot(root, globalFlags{}); err != nil {
 		t.Fatalf("organizeRetailFilesInRoot: %v", err)
 	}
 

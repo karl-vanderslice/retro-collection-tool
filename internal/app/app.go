@@ -360,17 +360,17 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 		return err
 	}
 	emitInfo(g, "sync", "", "accepted", outputFields{"systems": strings.Join(systems, ","), "compress": sf.compress, "dry_run": g.dryRun, "no_hacks": sf.noHacks})
+	emitInfo(g, "sync", "retail", "starting retail sync with igir", outputFields{"systems": len(systems)})
 
-	retailSpinner := newCommandSpinner(g, "sync", "retail", "running retail sync with igir")
 	for i, system := range systems {
-		retailSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
+		emitInfo(g, "sync", "retail", "starting system", outputFields{"system": system, "index": fmt.Sprintf("%d/%d", i+1, len(systems))})
 		if err := syncRetailSystem(ctx, cfg, runner, g, system, sf.compress); err != nil {
-			retailSpinner.Stop(false, err.Error())
 			emitError(g, "sync", "retail", "system failed", outputFields{"system": system, "error": err.Error()})
 			return err
 		}
+		emitInfo(g, "sync", "retail", "completed system", outputFields{"system": system, "index": fmt.Sprintf("%d/%d", i+1, len(systems))})
 	}
-	retailSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
+	emitInfo(g, "sync", "retail", "completed retail sync", outputFields{"systems": len(systems)})
 
 	if !sf.noHacks {
 		hacksSpinner := newCommandSpinner(g, "sync", "hacks", "building hacks overlays")

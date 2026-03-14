@@ -64,9 +64,11 @@ type biosCandidate struct {
 }
 
 type biosSummary struct {
-	Imported []string
-	Missing  []string
-	Unknown  []string
+	Imported        []string
+	Missing         []string
+	Unknown         []string
+	RequiredMissing []string
+	HashMismatches  []string
 }
 
 type biosScanStats struct {
@@ -181,9 +183,9 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 			return err
 		}
 		matchSpinner.Stop(true, fmt.Sprintf("imported=%d missing=%d", len(summary.Imported), len(summary.Missing)))
-		emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "unknown": len(summary.Unknown)})
-		if bf.strict && len(summary.Missing) > 0 {
-			return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.Missing))
+		emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "required_missing": len(summary.RequiredMissing), "hash_mismatches": len(summary.HashMismatches), "unknown": len(summary.Unknown)})
+		if bf.strict && len(summary.RequiredMissing) > 0 {
+			return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.RequiredMissing))
 		}
 		return nil
 	}
@@ -246,20 +248,26 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 		for _, line := range summary.Missing {
 			fmt.Println(line)
 		}
+		for _, line := range summary.HashMismatches {
+			fmt.Println(line)
+		}
 		for _, line := range summary.Unknown {
 			fmt.Println(line)
 		}
 	} else if len(summary.Unknown) > 0 {
 		emitInfo(g, "bios", "match", "skipped unknown candidates", outputFields{"count": len(summary.Unknown), "hint": "use --verbose for details"})
 	}
+	if len(summary.HashMismatches) > 0 {
+		emitInfo(g, "bios", "match", "hash mismatches", outputFields{"count": len(summary.HashMismatches), "hint": "use --verbose for details"})
+	}
 	if len(summary.Missing) > 0 {
 		emitInfo(g, "bios", "match", "missing catalog entries", outputFields{"count": len(summary.Missing), "hint": "use --verbose for details"})
 	}
 
-	emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "unknown": len(summary.Unknown)})
+	emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "required_missing": len(summary.RequiredMissing), "hash_mismatches": len(summary.HashMismatches), "unknown": len(summary.Unknown)})
 
-	if bf.strict && len(summary.Missing) > 0 {
-		return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.Missing))
+	if bf.strict && len(summary.RequiredMissing) > 0 {
+		return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.RequiredMissing))
 	}
 
 	return nil
@@ -688,10 +696,12 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 
 		match, mismatchedNames := findCatalogEntryMatch(entry, nameToCandidates)
 		if match == nil {
+			missingLine := fmt.Sprintf("[bios] missing %s/%s", sysCfg.RommSlug, libraryName)
+			summary.Missing = append(summary.Missing, missingLine)
 			if entry.Required {
-				summary.Missing = append(summary.Missing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, libraryName))
+				summary.RequiredMissing = append(summary.RequiredMissing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, libraryName))
 			}
-			summary.Missing = append(summary.Missing, mismatchedNames...)
+			summary.HashMismatches = append(summary.HashMismatches, mismatchedNames...)
 			continue
 		}
 
@@ -917,7 +927,8 @@ func loadBiosHashCache(path string) (*biosHashCache, error) {
 		return nil, fmt.Errorf("read bios hash cache %s: %w", path, err)
 	}
 	if err := yaml.Unmarshal(b, cache); err != nil {
-		return nil, fmt.Errorf("parse bios hash cache %s: %w", path, err)
+		// Cache corruption should not block BIOS imports; reset and rebuild cache.
+		return &biosHashCache{Version: 2, Entries: map[string]biosHashCacheEntry{}}, nil
 	}
 	if cache.Entries == nil {
 		cache.Entries = map[string]biosHashCacheEntry{}

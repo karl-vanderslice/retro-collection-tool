@@ -168,6 +168,49 @@ func TestRunBiosSkipsInvalidZipAndContinues(t *testing.T) {
 	}
 }
 
+func TestRunBiosEarlyCheckUsesExistingVaultFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "bios-source")
+	if err := os.MkdirAll(sourceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+
+	vaultDir := filepath.Join(root, "roms", "Vault", "BIOS", "gba")
+	if err := os.MkdirAll(vaultDir, 0o755); err != nil {
+		t.Fatalf("mkdir vault: %v", err)
+	}
+	vaultFile := filepath.Join(vaultDir, "gba_bios.bin")
+	if err := os.WriteFile(vaultFile, []byte("abc"), 0o644); err != nil {
+		t.Fatalf("write vault file: %v", err)
+	}
+
+	catalog := "entries:\n  - system: gba\n    required: true\n    destination: gba_bios.bin\n    sources:\n      - name: gba_bios.bin\n        md5: 900150983cd24fb0d6963f7d28e17f72\n"
+	catalogPath := filepath.Join(root, "bios-catalog.yaml")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+
+	cfg := biosTestConfig(root, sourceRoot, catalogPath)
+	if err := runBios(cfg, globalFlags{}, []string{"--systems", "gba"}); err != nil {
+		t.Fatalf("runBios should reuse vault file: %v", err)
+	}
+
+	libraryDst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
+	vaultInfo, err := os.Stat(vaultFile)
+	if err != nil {
+		t.Fatalf("stat vault: %v", err)
+	}
+	libraryInfo, err := os.Stat(libraryDst)
+	if err != nil {
+		t.Fatalf("stat library: %v", err)
+	}
+	if !os.SameFile(vaultInfo, libraryInfo) {
+		t.Fatalf("expected library to hardlink/copy from existing vault file")
+	}
+}
+
 func biosTestConfig(root, sourceRoot, catalogPath string) *config.Config {
 	return &config.Config{
 		Root: root,

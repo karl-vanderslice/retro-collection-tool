@@ -153,6 +153,28 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	}
 	cacheSpinner.Stop(true, fmt.Sprintf("entries=%d path=%s", len(hashCache.Entries), cachePath))
 
+	entriesNeedingScan, err := countEntriesNeedingScan(cfg, systems, catalog)
+	if err != nil {
+		emitError(g, "bios", "scan", "pre-check failed", outputFields{"error": err.Error()})
+		return err
+	}
+	if entriesNeedingScan == 0 {
+		emitInfo(g, "bios", "scan", "early check complete; all selected entries already satisfied in vault", nil)
+		matchSpinner := newCommandSpinner(g, "bios", "match", "linking existing vault files")
+		summary, err := syncBiosEntries(cfg, systems, catalog, nil, g, nil)
+		if err != nil {
+			matchSpinner.Stop(false, err.Error())
+			emitError(g, "bios", "match", "import failed", outputFields{"error": err.Error()})
+			return err
+		}
+		matchSpinner.Stop(true, fmt.Sprintf("imported=%d missing=%d", len(summary.Imported), len(summary.Missing)))
+		emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "unknown": len(summary.Unknown)})
+		if bf.strict && len(summary.Missing) > 0 {
+			return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.Missing))
+		}
+		return nil
+	}
+
 	scanSpinner := newCommandSpinner(g, "bios", "scan", "walking files and hashing candidates")
 	progress := func(stats biosScanStats, path string) {
 		if !g.verbose {
@@ -510,6 +532,64 @@ func biosPlanComplete(plan biosScanPlan) bool {
 	return plan.unresolvedEntryCount == 0
 }
 
+func findExistingVaultMatch(vaultPath string, entry biosCatalogEntry) (*biosCandidate, error) {
+	info, err := os.Stat(vaultPath)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, nil
+	}
+
+	hash, err := md5Path(vaultPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, src := range entry.Sources {
+		if strings.EqualFold(strings.TrimSpace(src.MD5), hash) {
+			return &biosCandidate{
+				Display:  vaultPath,
+				Name:     filepath.Base(vaultPath),
+				MD5:      hash,
+				FilePath: vaultPath,
+			}, nil
+		}
+	}
+	return nil, nil
+}
+
+func countEntriesNeedingScan(cfg *config.Config, systems []string, catalog *biosCatalog) (int, error) {
+	systemSet := map[string]bool{}
+	for _, s := range systems {
+		systemSet[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+
+	count := 0
+	for _, entry := range catalog.Entries {
+		systemKey := strings.ToLower(strings.TrimSpace(entry.System))
+		if !systemSet[systemKey] {
+			continue
+		}
+		sysCfg, ok := cfg.Systems[systemKey]
+		if !ok {
+			continue
+		}
+		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
+		match, err := findExistingVaultMatch(vaultDst, entry)
+		if err != nil {
+			return 0, err
+		}
+		if match == nil {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
 func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog, candidates []biosCandidate, g globalFlags, progress func(processed, total int, system, destination string)) (*biosSummary, error) {
 	systemSet := make(map[string]bool, len(systems))
 	for _, s := range systems {
@@ -551,6 +631,24 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 			return nil, fmt.Errorf("bios catalog references unknown system: %s", systemKey)
 		}
 
+		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
+		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
+		vaultMatch, err := findExistingVaultMatch(vaultDst, entry)
+		if err != nil {
+			return nil, err
+		}
+		if vaultMatch != nil {
+			if g.dryRun {
+				summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios link %s -> %s", vaultDst, libraryDst))
+			} else {
+				if err := fsutil.LinkOrCopy(vaultDst, libraryDst); err != nil {
+					return nil, err
+				}
+				summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] reused %s (linked %s)", vaultDst, libraryDst))
+			}
+			continue
+		}
+
 		match, mismatchedNames := findCatalogEntryMatch(entry, nameAndHashToCandidates, nameToCandidates)
 		if match == nil {
 			if entry.Required {
@@ -561,8 +659,6 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		}
 
 		usedCandidates[match.Display] = true
-		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
-		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
 		if g.dryRun {
 			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios import %s -> %s (link %s)", match.Display, vaultDst, libraryDst))
 			continue

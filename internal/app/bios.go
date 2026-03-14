@@ -166,18 +166,21 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	}
 	matchSpinner.Stop(true, fmt.Sprintf("imported=%d missing=%d", len(summary.Imported), len(summary.Missing)))
 
-	for _, line := range summary.Imported {
-		fmt.Println(line)
-	}
-	for _, line := range summary.Missing {
-		fmt.Println(line)
-	}
 	if g.verbose {
+		for _, line := range summary.Imported {
+			fmt.Println(line)
+		}
+		for _, line := range summary.Missing {
+			fmt.Println(line)
+		}
 		for _, line := range summary.Unknown {
 			fmt.Println(line)
 		}
 	} else if len(summary.Unknown) > 0 {
 		fmt.Printf("[bios] skipped unknown candidates: %d (use --verbose for details)\n", len(summary.Unknown))
+	}
+	if len(summary.Missing) > 0 {
+		fmt.Printf("[bios] missing catalog entries: %d (use --verbose for details)\n", len(summary.Missing))
 	}
 
 	fmt.Printf("[bios] summary: imported=%d missing=%d unknown=%d\n", len(summary.Imported), len(summary.Missing), len(summary.Unknown))
@@ -434,8 +437,7 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
 		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
 		if g.dryRun {
-			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios copy %s -> %s", match.Display, vaultDst))
-			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios link %s -> %s", vaultDst, libraryDst))
+			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios import %s -> %s (link %s)", match.Display, vaultDst, libraryDst))
 			continue
 		}
 
@@ -445,8 +447,7 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		if err := fsutil.LinkOrCopy(vaultDst, libraryDst); err != nil {
 			return nil, err
 		}
-		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] copied %s -> %s", match.Display, vaultDst))
-		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] linked %s -> %s", vaultDst, libraryDst))
+		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] imported %s -> %s (linked %s)", match.Display, vaultDst, libraryDst))
 	}
 
 	for _, c := range candidates {

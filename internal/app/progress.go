@@ -62,10 +62,6 @@ func (s *commandSpinner) Update(status string) {
 	s.mu.Lock()
 	s.status = strings.TrimSpace(status)
 	s.mu.Unlock()
-
-	if !s.active {
-		fmt.Printf("[%s] [%s] %s\n", s.prefix, s.phase, strings.TrimSpace(status))
-	}
 }
 
 func (s *commandSpinner) Stop(ok bool, final string) {

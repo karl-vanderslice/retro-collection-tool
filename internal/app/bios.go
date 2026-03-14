@@ -60,6 +60,13 @@ type biosSummary struct {
 	Unknown  []string
 }
 
+type biosScanStats struct {
+	Scanned    int
+	CacheHits  int
+	CacheMiss  int
+	ZipEntries int
+}
+
 type biosHashCache struct {
 	Version int                           `yaml:"version"`
 	Entries map[string]biosHashCacheEntry `yaml:"entries"`
@@ -96,51 +103,68 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 
 	fmt.Printf("[bios] accepted: systems=%s strict=%t dry-run=%t\n", strings.Join(systems, ","), bf.strict, g.dryRun)
 
+	loadSpinner := newCommandSpinner("bios", "catalog", "loading BIOS catalog")
 	catalog, err := loadBiosCatalog(cfg)
 	if err != nil {
+		loadSpinner.Stop(false, err.Error())
 		return err
 	}
 	if len(catalog.Entries) == 0 {
+		loadSpinner.Stop(false, "catalog has no entries")
 		return errors.New("bios catalog has no entries")
 	}
-	fmt.Printf("[bios] loaded catalog entries: %d\n", len(catalog.Entries))
+	loadSpinner.Stop(true, fmt.Sprintf("loaded entries=%d", len(catalog.Entries)))
 
 	sourceRoots := resolveBiosSourceRoots(cfg)
 	if len(sourceRoots) == 0 {
 		return errors.New("bios.source_roots must include at least one directory")
 	}
-	fmt.Printf("[bios] scanning source roots recursively: %s\n", strings.Join(sourceRoots, ", "))
+	fmt.Printf("[bios] source roots (recursive): %s\n", strings.Join(sourceRoots, ", "))
 
 	cachePath := filepath.Join(resolveCacheRoot(cfg), "bios_md5_cache.yaml")
+	cacheSpinner := newCommandSpinner("bios", "cache", "loading md5 cache")
 	hashCache, err := loadBiosHashCache(cachePath)
 	if err != nil {
+		cacheSpinner.Stop(false, err.Error())
 		return err
 	}
-	fmt.Printf("[bios] loaded md5 cache entries: %d (%s)\n", len(hashCache.Entries), cachePath)
+	cacheSpinner.Stop(true, fmt.Sprintf("entries=%d path=%s", len(hashCache.Entries), cachePath))
 
-	progress := func(scanned int, path string) {
-		if scanned == 1 || scanned%250 == 0 {
-			fmt.Printf("[bios] scanned candidates=%d (latest: %s)\n", scanned, path)
+	scanSpinner := newCommandSpinner("bios", "scan", "walking files and hashing candidates")
+	progress := func(stats biosScanStats, path string) {
+		if stats.Scanned == 1 || stats.Scanned%100 == 0 {
+			scanSpinner.Update(fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d latest=%s", stats.Scanned, stats.CacheHits, stats.CacheMiss, path))
 		}
 	}
 
-	candidates, cacheDirty, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache)
+	candidates, cacheDirty, scanStats, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache)
 	if err != nil {
+		scanSpinner.Stop(false, err.Error())
 		return err
 	}
-	fmt.Printf("[bios] scan complete: %d candidate files\n", len(candidates))
+	scanSpinner.Stop(true, fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d zip-entries=%d", scanStats.Scanned, scanStats.CacheHits, scanStats.CacheMiss, scanStats.ZipEntries))
 	if cacheDirty {
+		saveCacheSpinner := newCommandSpinner("bios", "cache", "writing md5 cache")
 		if err := saveBiosHashCache(cachePath, hashCache); err != nil {
+			saveCacheSpinner.Stop(false, err.Error())
 			return err
 		}
-		fmt.Printf("[bios] updated md5 cache: %s\n", cachePath)
+		saveCacheSpinner.Stop(true, fmt.Sprintf("updated %s", cachePath))
 	}
-	fmt.Println("[bios] matching against catalog and importing")
 
-	summary, err := syncBiosEntries(cfg, systems, catalog, candidates, g)
+	matchSpinner := newCommandSpinner("bios", "match", "matching catalog entries and importing")
+	matchProgress := func(processed, total int, system, destination string) {
+		if processed == 1 || processed%10 == 0 || processed == total {
+			matchSpinner.Update(fmt.Sprintf("processed=%d/%d system=%s target=%s", processed, total, system, destination))
+		}
+	}
+
+	summary, err := syncBiosEntries(cfg, systems, catalog, candidates, g, matchProgress)
 	if err != nil {
+		matchSpinner.Stop(false, err.Error())
 		return err
 	}
+	matchSpinner.Stop(true, fmt.Sprintf("imported=%d missing=%d", len(summary.Imported), len(summary.Missing)))
 
 	for _, line := range summary.Imported {
 		fmt.Println(line)
@@ -233,8 +257,9 @@ func resolveBiosSourceRoots(cfg *config.Config) []string {
 	return dedupePreserveOrder(out)
 }
 
-func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(scanned int, path string), hashCache *biosHashCache) ([]biosCandidate, bool, error) {
+func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(stats biosScanStats, path string), hashCache *biosHashCache) ([]biosCandidate, bool, biosScanStats, error) {
 	out := make([]biosCandidate, 0)
+	stats := biosScanStats{}
 	scanned := 0
 	cacheDirty := false
 
@@ -247,7 +272,7 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sca
 			continue
 		}
 		if err != nil {
-			return nil, cacheDirty, err
+			return nil, cacheDirty, stats, err
 		}
 		if !info.IsDir() {
 			continue
@@ -269,9 +294,11 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sca
 				out = append(out, zipItems...)
 				for range zipItems {
 					scanned++
+					stats.ZipEntries++
 				}
+				stats.Scanned = scanned
 				if progress != nil {
-					progress(scanned, path)
+					progress(stats, path)
 				}
 				return nil
 			}
@@ -282,6 +309,9 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sca
 			}
 			if changed {
 				cacheDirty = true
+				stats.CacheMiss++
+			} else {
+				stats.CacheHits++
 			}
 			out = append(out, biosCandidate{
 				Display:  path,
@@ -290,20 +320,21 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sca
 				FilePath: path,
 			})
 			scanned++
+			stats.Scanned = scanned
 			if progress != nil {
-				progress(scanned, path)
+				progress(stats, path)
 			}
 			return nil
 		})
 		if err != nil {
-			return nil, cacheDirty, err
+			return nil, cacheDirty, stats, err
 		}
 	}
 
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Display < out[j].Display
 	})
-	return out, cacheDirty, nil
+	return out, cacheDirty, stats, nil
 }
 
 func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
@@ -349,7 +380,7 @@ func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
 	return items, nil
 }
 
-func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog, candidates []biosCandidate, g globalFlags) (*biosSummary, error) {
+func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog, candidates []biosCandidate, g globalFlags, progress func(processed, total int, system, destination string)) (*biosSummary, error) {
 	systemSet := make(map[string]bool, len(systems))
 	for _, s := range systems {
 		systemSet[s] = true
@@ -366,10 +397,23 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 	usedCandidates := map[string]bool{}
 	summary := &biosSummary{}
 
+	total := 0
+	for _, entry := range catalog.Entries {
+		systemKey := strings.ToLower(strings.TrimSpace(entry.System))
+		if systemSet[systemKey] {
+			total++
+		}
+	}
+	processed := 0
+
 	for _, entry := range catalog.Entries {
 		systemKey := strings.ToLower(strings.TrimSpace(entry.System))
 		if !systemSet[systemKey] {
 			continue
+		}
+		processed++
+		if progress != nil {
+			progress(processed, total, systemKey, entry.Destination)
 		}
 
 		sysCfg, ok := cfg.Systems[systemKey]

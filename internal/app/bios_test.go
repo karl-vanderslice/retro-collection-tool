@@ -211,6 +211,61 @@ func TestRunBiosEarlyCheckUsesExistingVaultFile(t *testing.T) {
 	}
 }
 
+func TestRunBiosImportsWithNameOnlyCatalogSource(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "bios-source")
+	if err := os.MkdirAll(sourceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+
+	src := filepath.Join(sourceRoot, "prod.keys")
+	if err := os.WriteFile(src, []byte("unique-device-key-content"), 0o644); err != nil {
+		t.Fatalf("write source bios: %v", err)
+	}
+
+	catalog := "entries:\n  - system: switch\n    required: true\n    destination: ryujinx/keys/prod.keys\n    sources:\n      - name: prod.keys\n"
+	catalogPath := filepath.Join(root, "bios-catalog.yaml")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+
+	cfg := &config.Config{
+		Root: root,
+		Paths: config.PathsConfig{
+			RommLibraryBios: "roms/Library/bios",
+			VaultBios:       "roms/Vault/BIOS",
+		},
+		Bios: config.BiosConfig{
+			CatalogFile: catalogPath,
+			SourceRoots: []string{sourceRoot},
+		},
+		Features: config.FeatureToggles{
+			EnableBios: true,
+		},
+		Systems: map[string]config.SystemConfig{
+			"switch": {
+				Enabled:  true,
+				RommSlug: "switch",
+			},
+		},
+	}
+
+	if err := runBios(cfg, globalFlags{}, []string{"--systems", "switch"}); err != nil {
+		t.Fatalf("runBios: %v", err)
+	}
+
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "ryujinx", "keys", "prod.keys")
+	libraryDst := filepath.Join(root, "roms", "Library", "bios", "switch", "prod.keys")
+	if _, err := os.Stat(vaultDst); err != nil {
+		t.Fatalf("expected BIOS vault output at %s: %v", vaultDst, err)
+	}
+	if _, err := os.Stat(libraryDst); err != nil {
+		t.Fatalf("expected BIOS library output at %s: %v", libraryDst, err)
+	}
+}
+
 func biosTestConfig(root, sourceRoot, catalogPath string) *config.Config {
 	return &config.Config{
 		Root: root,
@@ -231,5 +286,45 @@ func biosTestConfig(root, sourceRoot, catalogPath string) *config.Config {
 				RommSlug: "gba",
 			},
 		},
+	}
+}
+
+func TestDefaultBiosCatalogCoversEnabledSystems(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Join(wd, "..", "..")
+	configPath := filepath.Join(repoRoot, "config", "retro-collection-tool.yaml")
+	catalogPath := filepath.Join(repoRoot, "config", "bios-catalog.yaml")
+
+	cfg, err := config.LoadMerged([]string{configPath}, config.EnvOverrides{Root: "/tmp/retro-library"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	b, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("read bios catalog: %v", err)
+	}
+	catalog, err := parseBiosCatalog(b)
+	if err != nil {
+		t.Fatalf("parse bios catalog: %v", err)
+	}
+
+	hasCatalog := map[string]bool{}
+	for _, entry := range catalog.Entries {
+		hasCatalog[entry.System] = true
+		if _, ok := cfg.Systems[entry.System]; !ok {
+			t.Fatalf("bios catalog references unknown system %q", entry.System)
+		}
+	}
+
+	for _, system := range cfg.EnabledSystems() {
+		if !hasCatalog[system] {
+			t.Fatalf("enabled system %q missing BIOS catalog entries", system)
+		}
 	}
 }

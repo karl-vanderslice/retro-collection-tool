@@ -35,6 +35,15 @@ features:
   enable_arcade: false
 
 systems:
+  3do:
+    enabled: true
+    romm_slug: 3do
+    retail_dat_source: redump
+    retail_dat_pattern: Panasonic - 3DO Interactive Multiplayer
+  3ds:
+    enabled: true
+    romm_slug: 3ds
+    dat_pattern: Nintendo - Nintendo 3DS (Decrypted)
   gb:
     enabled: true
     romm_slug: gb
@@ -105,11 +114,69 @@ systems:
     romm_slug: dreamcast
     retail_dat_source: redump
     retail_dat_pattern: Sega - Dreamcast
+  jaguar:
+    enabled: true
+    romm_slug: jaguar
+    dat_pattern: Atari - Atari Jaguar (ROM)
+  jaguar-cd:
+    enabled: true
+    romm_slug: atari-jaguar-cd
+    retail_dat_source: redump
+    retail_dat_pattern: Atari - Jaguar CD Interactive Multimedia System
+  lynx:
+    enabled: true
+    romm_slug: lynx
+    dat_pattern: Atari - Atari Lynx (LYX)
   gamecube:
     enabled: true
     romm_slug: gamecube
     retail_dat_source: redump
     retail_dat_pattern: Nintendo - GameCube
+  nds:
+    enabled: true
+    romm_slug: nds
+    dat_pattern: Nintendo - Nintendo DS (Decrypted)
+  neo-geo-cd:
+    enabled: true
+    romm_slug: neo-geo-cd
+    retail_dat_source: redump
+    retail_dat_pattern: SNK - Neo Geo CD
+  neo-geo-aes:
+    enabled: false
+    romm_slug: neogeoaes
+    dat_pattern: SNK - Neo Geo AES
+  new-nintendo-3ds:
+    enabled: true
+    romm_slug: new-nintendo-3ds
+    dat_pattern: Nintendo - New Nintendo 3DS (Decrypted)
+  nintendo-dsi:
+    enabled: true
+    romm_slug: nintendo-dsi
+    dat_pattern: Nintendo - Nintendo DSi (Decrypted)
+  philips-cd-i:
+    enabled: false
+    romm_slug: philips-cd-i
+    retail_dat_source: redump
+    retail_dat_pattern: Philips - CD-i
+  ps3:
+    enabled: true
+    romm_slug: ps3
+    retail_dat_source: redump
+    retail_dat_pattern: Sony - PlayStation 3
+  ps4:
+    enabled: false
+    romm_slug: ps4
+    retail_dat_source: redump
+    retail_dat_pattern: Sony - PlayStation 4
+  psp:
+    enabled: true
+    romm_slug: psp
+    retail_dat_source: redump
+    retail_dat_pattern: Sony - PlayStation Portable
+  psvita:
+    enabled: false
+    romm_slug: psvita
+    dat_pattern: Sony - PlayStation Vita (PSN) (Content)
   psx:
     enabled: true
     romm_slug: psx
@@ -125,63 +192,113 @@ systems:
     romm_slug: saturn
     retail_dat_source: redump
     retail_dat_pattern: Sega - Saturn
+  switch:
+    enabled: false
+    romm_slug: switch
+    dat_pattern: Nintendo - Nintendo Switch
+  switch-2:
+    enabled: false
+    romm_slug: switch-2
+    dat_pattern: Nintendo - Switch 2
   wii:
     enabled: true
     romm_slug: wii
     retail_dat_source: redump
     retail_dat_pattern: Nintendo - Wii
+  wiiu:
+    enabled: true
+    romm_slug: wiiu
+    dat_pattern: Nintendo - Wii U (Digital) (CDN)
   xbox:
     enabled: true
     romm_slug: xbox
     retail_dat_source: redump
     retail_dat_pattern: Microsoft - Xbox
+  xbox360:
+    enabled: true
+    romm_slug: xbox360
+    retail_dat_source: redump
+    retail_dat_pattern: Microsoft - Xbox 360
+  turbografx-cd:
+    enabled: true
+    romm_slug: turbografx-cd
+    retail_dat_source: redump
+    retail_dat_pattern: NEC - PC Engine CD & TurboGrafx CD
 
 bootstrap:
   romm_roms:
+    - 3do
+    - 3ds
+    - dreamcast
     - gb
     - gba
     - gbc
+    - gamecube
     - gamegear
-    - nes
     - genesis
+    - jaguar
+    - jaguar-cd
+    - lynx
     - msx
     - msx2
     - n64
+    - nds
+    - neo-geo-cd
     - neo-geo-pocket
     - neo-geo-pocket-color
+    - new-nintendo-3ds
+    - nintendo-dsi
+    - nes
+    - ps2
+    - ps3
+    - psp
+    - psx
+    - saturn
     - sega32
     - sms
     - snes
     - supergrafx
     - tg16
-    - dreamcast
-    - gamecube
-    - psx
-    - ps2
-    - saturn
+    - turbografx-cd
     - wii
+    - wiiu
     - xbox
+    - xbox360
   romm_bios:
+    - 3do
+    - 3ds
+    - dreamcast
     - gb
     - gba
     - gbc
+    - gamecube
     - gamegear
-    - nes
     - genesis
+    - jaguar
+    - jaguar-cd
+    - lynx
     - msx
     - msx2
     - n64
+    - nds
+    - neo-geo-cd
     - neo-geo-pocket
     - neo-geo-pocket-color
+    - new-nintendo-3ds
+    - nintendo-dsi
+    - nes
+    - ps2
+    - ps3
+    - psp
+    - psx
+    - saturn
     - sega32
     - sms
     - snes
     - supergrafx
     - tg16
-    - dreamcast
-    - gamecube
-    - psx
-    - ps2
-    - saturn
+    - turbografx-cd
     - wii
+    - wiiu
     - xbox
+    - xbox360

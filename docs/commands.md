@@ -47,9 +47,11 @@ Examples:
 Imports BIOS files into ROMM Structure A targets:
 `roms/Library/bios/<platform>/...`
 
-The BIOS workflow is feature-gated by `features.enable_bios` and uses strict known-file matching from a BIOS catalog.
+The BIOS workflow is feature-gated by `features.enable_bios` and uses catalog matching for known BIOS files.
 
-- Matching requires both filename and MD5 hash from the catalog.
+- Matching always uses filename from the catalog.
+- If a catalog source includes MD5, hash must also match.
+- If a catalog source omits MD5, filename-only matching is used.
 - Unknown files are skipped and reported.
 - Source roots can include raw files and zip packs.
 

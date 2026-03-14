@@ -7,9 +7,9 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), des
 - Config-driven workflows with strict validation.
 - Retail sync via hardlinks using latest matching DAT from No-Intro or ReDump.
 - Curated hacks flow that patches from `roms/Hacks/<system>/<hack-name>/` and writes ROMM-compatible output.
-- BIOS import workflow with strict catalog-based filename and MD5 matching.
+- BIOS import workflow with catalog-based filename matching and optional MD5 validation.
 - Export selected systems to an SD card destination.
-- Explicit feature-flagged stubs for ReDump and Arcade.
+- Explicit feature-flagged stubs for Arcade.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ Set library root safely outside repo config using either:
 - `bootstrap`
 - `systems`
 - `bios`
-- `redump` (stub)
+- `redump` (stub command; ReDump is supported through `sync`)
 - `arcade` (stub)
 
 ## Configuration
@@ -55,7 +55,12 @@ Then `RETRO_COLLECTION_TOOL_ROOT` overrides `root`.
 - `root` should come from your user XDG config or `RETRO_COLLECTION_TOOL_ROOT`.
 - `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
 - `features` gates unfinished workflows.
-- Default enabled systems: `gb`, `gba`, `gbc`, `gamegear`, `genesis`, `msx`, `msx2`, `n64`, `nes`, `neo-geo-pocket`, `neo-geo-pocket-color`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`, `dreamcast`, `gamecube`, `psx`, `ps2`, `saturn`, `wii`, `xbox`.
+- Default enabled systems: `3do`, `3ds`, `dreamcast`, `gb`, `gba`, `gbc`, `gamecube`, `gamegear`, `genesis`, `jaguar`, `jaguar-cd`, `lynx`, `msx`, `msx2`, `n64`, `nds`, `neo-geo-cd`, `neo-geo-pocket`, `neo-geo-pocket-color`, `new-nintendo-3ds`, `nintendo-dsi`, `nes`, `ps2`, `ps3`, `psp`, `psx`, `saturn`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`, `turbografx-cd`, `wii`, `wiiu`, `xbox`, `xbox360`.
+
+## Not Yet Implemented
+
+- Arcade workflow command (`arcade`) remains feature-flagged and stubbed.
+- DOS and ScummVM workflows are not currently modeled as curated system workflows in this tool.
 
 If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool`.
 

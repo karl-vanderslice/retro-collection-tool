@@ -301,7 +301,8 @@ func parseBiosCatalog(data []byte) (*biosCatalog, error) {
 			if strings.TrimSpace(s.Name) == "" {
 				return nil, fmt.Errorf("bios catalog entry %d source %d missing name", i, j)
 			}
-			if !isMD5Hex(s.MD5) {
+			md5Value := strings.TrimSpace(s.MD5)
+			if md5Value != "" && !isMD5Hex(md5Value) {
 				return nil, fmt.Errorf("bios catalog entry %d source %d has invalid md5", i, j)
 			}
 		}
@@ -506,6 +507,9 @@ func buildBiosScanPlan(catalog *biosCatalog, systems []string) biosScanPlan {
 			name := strings.ToLower(strings.TrimSpace(src.Name))
 			hash := strings.ToLower(strings.TrimSpace(src.MD5))
 			plan.targetNames[name] = true
+			if hash == "" {
+				hash = "*"
+			}
 			key := biosMatchKey(name, hash)
 			plan.keyToEntryIndices[key] = append(plan.keyToEntryIndices[key], entryIdx)
 		}
@@ -518,8 +522,10 @@ func markBiosPlanCandidate(plan *biosScanPlan, candidate biosCandidate) {
 	if plan == nil {
 		return
 	}
-	key := biosMatchKey(candidate.Name, candidate.MD5)
-	indices := plan.keyToEntryIndices[key]
+	exactKey := biosMatchKey(candidate.Name, candidate.MD5)
+	indices := append([]int{}, plan.keyToEntryIndices[exactKey]...)
+	nameOnlyKey := biosMatchKey(candidate.Name, "*")
+	indices = append(indices, plan.keyToEntryIndices[nameOnlyKey]...)
 	for _, idx := range indices {
 		if plan.resolvedEntries[idx] {
 			continue
@@ -545,6 +551,16 @@ func findExistingVaultMatch(vaultPath string, entry biosCatalogEntry) (*biosCand
 	}
 	if info.IsDir() {
 		return nil, nil
+	}
+
+	for _, src := range entry.Sources {
+		if strings.TrimSpace(src.MD5) == "" {
+			return &biosCandidate{
+				Display:  vaultPath,
+				Name:     filepath.Base(vaultPath),
+				FilePath: vaultPath,
+			}, nil
+		}
 	}
 
 	hash, err := md5Path(vaultPath)
@@ -691,6 +707,14 @@ func findCatalogEntryMatch(entry biosCatalogEntry, byNameHash map[string][]biosC
 	for _, src := range entry.Sources {
 		name := strings.ToLower(strings.TrimSpace(src.Name))
 		hash := strings.ToLower(strings.TrimSpace(src.MD5))
+		if hash == "" {
+			matches := byName[name]
+			if len(matches) > 0 {
+				m := matches[0]
+				return &m, mismatches
+			}
+			continue
+		}
 		matches := byNameHash[biosMatchKey(name, hash)]
 		if len(matches) > 0 {
 			m := matches[0]

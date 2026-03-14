@@ -155,3 +155,238 @@ entries:
     sources:
       - name: mpr-17933.bin
         md5: 3240872c70984b6cbfda1586cab68dbe
+
+  - system: 3do
+    required: false
+    destination: panafz1.bin
+    sources:
+      - name: panafz1.bin
+
+  - system: 3ds
+    required: false
+    destination: citra/keys/aes_keys.txt
+    sources:
+      - name: aes_keys.txt
+
+  - system: new-nintendo-3ds
+    required: false
+    destination: citra/keys/aes_keys.txt
+    sources:
+      - name: aes_keys.txt
+
+  - system: gamecube
+    required: false
+    destination: IPL.bin
+    sources:
+      - name: IPL.bin
+
+  - system: jaguar
+    required: false
+    destination: jagboot.rom
+    sources:
+      - name: jagboot.rom
+
+  - system: jaguar-cd
+    required: false
+    destination: jagcd.bin
+    sources:
+      - name: jagcd.bin
+
+  - system: lynx
+    required: false
+    destination: lynxboot.img
+    sources:
+      - name: lynxboot.img
+
+  - system: msx
+    required: false
+    destination: MSX.ROM
+    sources:
+      - name: MSX.ROM
+
+  - system: msx2
+    required: false
+    destination: MSX2.ROM
+    sources:
+      - name: MSX2.ROM
+
+  - system: n64
+    required: false
+    destination: pifdata.bin
+    sources:
+      - name: pifdata.bin
+
+  - system: nds
+    required: false
+    destination: bios7.bin
+    sources:
+      - name: bios7.bin
+
+  - system: nds
+    required: false
+    destination: bios9.bin
+    sources:
+      - name: bios9.bin
+
+  - system: nds
+    required: false
+    destination: firmware.bin
+    sources:
+      - name: firmware.bin
+
+  - system: nintendo-dsi
+    required: false
+    destination: dsi_bios7.bin
+    sources:
+      - name: dsi_bios7.bin
+
+  - system: nintendo-dsi
+    required: false
+    destination: dsi_bios9.bin
+    sources:
+      - name: dsi_bios9.bin
+
+  - system: nintendo-dsi
+    required: false
+    destination: dsi_firmware.bin
+    sources:
+      - name: dsi_firmware.bin
+
+  - system: nintendo-dsi
+    required: false
+    destination: dsi_nand.bin
+    sources:
+      - name: dsi_nand.bin
+
+  - system: neo-geo-aes
+    required: false
+    destination: neogeo.zip
+    sources:
+      - name: neogeo.zip
+
+  - system: neo-geo-cd
+    required: false
+    destination: neocdz.zip
+    sources:
+      - name: neocdz.zip
+
+  - system: neo-geo-pocket
+    required: false
+    destination: ngp_bios.ngp
+    sources:
+      - name: ngp_bios.ngp
+
+  - system: neo-geo-pocket-color
+    required: false
+    destination: ngpcbios.rom
+    sources:
+      - name: ngpcbios.rom
+
+  - system: philips-cd-i
+    required: false
+    destination: cdimono1.zip
+    sources:
+      - name: cdimono1.zip
+
+  - system: ps2
+    required: false
+    destination: scph10000.bin
+    sources:
+      - name: scph10000.bin
+
+  - system: ps3
+    required: false
+    destination: PS3UPDAT.PUP
+    sources:
+      - name: PS3UPDAT.PUP
+
+  - system: ps4
+    required: false
+    destination: PS4UPDATE.PUP
+    sources:
+      - name: PS4UPDATE.PUP
+
+  - system: psp
+    required: false
+    destination: ppsspp.zip
+    sources:
+      - name: ppsspp.zip
+
+  - system: psvita
+    required: false
+    destination: firmware.bin
+    sources:
+      - name: firmware.bin
+
+  - system: sega32
+    required: false
+    destination: 32X_G_BIOS.BIN
+    sources:
+      - name: 32X_G_BIOS.BIN
+
+  - system: sega32
+    required: false
+    destination: 32X_M_BIOS.BIN
+    sources:
+      - name: 32X_M_BIOS.BIN
+
+  - system: sega32
+    required: false
+    destination: 32X_S_BIOS.BIN
+    sources:
+      - name: 32X_S_BIOS.BIN
+
+  - system: snes
+    required: false
+    destination: dsp1b.bin
+    sources:
+      - name: dsp1b.bin
+
+  - system: switch
+    required: false
+    destination: ryujinx/keys/prod.keys
+    sources:
+      - name: prod.keys
+
+  - system: switch-2
+    required: false
+    destination: ryujinx/keys/prod.keys
+    sources:
+      - name: prod.keys
+
+  - system: turbografx-cd
+    required: false
+    destination: syscard3.pce
+    sources:
+      - name: syscard3.pce
+        md5: 38179df8f4ac870017db21ebcbf53114
+
+  - system: wii
+    required: false
+    destination: keys.bin
+    sources:
+      - name: keys.bin
+
+  - system: wiiu
+    required: false
+    destination: cemu/keys.txt
+    sources:
+      - name: keys.txt
+
+  - system: xbox
+    required: false
+    destination: mcpx_1.0.bin
+    sources:
+      - name: mcpx_1.0.bin
+
+  - system: xbox
+    required: false
+    destination: Complex_4627v1.03.bin
+    sources:
+      - name: Complex_4627v1.03.bin
+
+  - system: xbox360
+    required: false
+    destination: xbox360_bios.bin
+    sources:
+      - name: xbox360_bios.bin

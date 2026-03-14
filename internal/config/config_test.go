@@ -174,6 +174,10 @@ func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 		rommSlug   string
 		datPattern string
 	}{
+		"3ds": {
+			rommSlug:   "3ds",
+			datPattern: "Nintendo - Nintendo 3DS (Decrypted)",
+		},
 		"msx": {
 			rommSlug:   "msx",
 			datPattern: "Microsoft - MSX",
@@ -238,6 +242,30 @@ func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 			rommSlug:   "genesis",
 			datPattern: "Sega - Mega Drive - Genesis",
 		},
+		"jaguar": {
+			rommSlug:   "jaguar",
+			datPattern: "Atari - Atari Jaguar (ROM)",
+		},
+		"lynx": {
+			rommSlug:   "lynx",
+			datPattern: "Atari - Atari Lynx (LYX)",
+		},
+		"nds": {
+			rommSlug:   "nds",
+			datPattern: "Nintendo - Nintendo DS (Decrypted)",
+		},
+		"new-nintendo-3ds": {
+			rommSlug:   "new-nintendo-3ds",
+			datPattern: "Nintendo - New Nintendo 3DS (Decrypted)",
+		},
+		"nintendo-dsi": {
+			rommSlug:   "nintendo-dsi",
+			datPattern: "Nintendo - Nintendo DSi (Decrypted)",
+		},
+		"wiiu": {
+			rommSlug:   "wiiu",
+			datPattern: "Nintendo - Wii U (Digital) (CDN)",
+		},
 	}
 
 	for key, tc := range testCases {
@@ -260,13 +288,33 @@ func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 		rommSlug string
 		pattern  string
 	}{
+		"3do": {
+			rommSlug: "3do",
+			pattern:  "Panasonic - 3DO Interactive Multiplayer",
+		},
 		"dreamcast": {
 			rommSlug: "dreamcast",
 			pattern:  "Sega - Dreamcast",
 		},
+		"jaguar-cd": {
+			rommSlug: "atari-jaguar-cd",
+			pattern:  "Atari - Jaguar CD Interactive Multimedia System",
+		},
+		"neo-geo-cd": {
+			rommSlug: "neo-geo-cd",
+			pattern:  "SNK - Neo Geo CD",
+		},
 		"gamecube": {
 			rommSlug: "gamecube",
 			pattern:  "Nintendo - GameCube",
+		},
+		"ps3": {
+			rommSlug: "ps3",
+			pattern:  "Sony - PlayStation 3",
+		},
+		"psp": {
+			rommSlug: "psp",
+			pattern:  "Sony - PlayStation Portable",
 		},
 		"psx": {
 			rommSlug: "psx",
@@ -284,9 +332,17 @@ func TestLoadDefaultConfigIncludesExpandedNoIntroSystems(t *testing.T) {
 			rommSlug: "wii",
 			pattern:  "Nintendo - Wii",
 		},
+		"xbox360": {
+			rommSlug: "xbox360",
+			pattern:  "Microsoft - Xbox 360",
+		},
 		"xbox": {
 			rommSlug: "xbox",
 			pattern:  "Microsoft - Xbox",
+		},
+		"turbografx-cd": {
+			rommSlug: "turbografx-cd",
+			pattern:  "NEC - PC Engine CD & TurboGrafx CD",
 		},
 	}
 

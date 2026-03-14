@@ -43,14 +43,15 @@ All paths are relative to `root` unless absolute.
 
 ## BIOS
 
-BIOS imports are catalog-driven and enforce strict hash matching for known files.
+BIOS imports are catalog-driven and can enforce hash matching for known files.
 
 - `bios.catalog_file`: optional path to a custom BIOS catalog YAML.
   - If omitted, the built-in default catalog is used.
   - Relative paths are resolved from current working directory first, then from `root`.
 - `bios.source_roots`: directories scanned for BIOS files and zip packs.
 
-Only files that match both configured filename and MD5 are imported.
+Only files that match configured catalog names are imported.
+When a source MD5 is provided in the catalog, the hash must match as well.
 Unknown files are skipped and reported.
 
 ## Systems
@@ -69,7 +70,7 @@ If `retail_dat_pattern` is omitted, `dat_pattern` is used for retail sync.
 
 Hacks do not require DAT files. The hacks workflow uses `rompatcherjs` and applies all discovered patch files in sorted filename order.
 
-ReDump and Arcade are feature-gated stubs and do not require per-system DAT keys yet.
+Arcade remains feature-gated. ReDump is supported through per-system `retail_dat_source: redump`.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
 

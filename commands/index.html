@@ -93,6 +93,10 @@
               <ul class="nav flex-column">
               </ul>
             </li>
+            <li class="nav-item" data-bs-level="2"><a href="#bios" class="nav-link">bios</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
             <li class="nav-item" data-bs-level="2"><a href="#export" class="nav-link">export</a>
               <ul class="nav flex-column">
               </ul>
@@ -143,6 +147,23 @@
 <p>Examples:
 <code>retro-collection-tool clean --systems genesis</code></p>
 <p><code>retro-collection-tool --dry-run clean --all-systems --include-bios</code></p>
+<h2 id="bios">bios</h2>
+<p>Imports BIOS files into ROMM Structure A targets:
+<code>roms/Library/bios/&lt;platform&gt;/...</code></p>
+<p>The BIOS workflow is feature-gated by <code>features.enable_bios</code> and uses strict known-file matching from a BIOS catalog.</p>
+<ul>
+<li>Matching requires both filename and MD5 hash from the catalog.</li>
+<li>Unknown files are skipped and reported.</li>
+<li>Source roots can include raw files and zip packs.</li>
+</ul>
+<p>Flags:</p>
+<ul>
+<li><code>--systems &lt;csv&gt;</code> or <code>--all-systems</code></li>
+<li><code>--strict</code> to fail when required BIOS entries are missing</li>
+</ul>
+<p>Examples:</p>
+<p><code>retro-collection-tool bios --systems gba,gbc</code></p>
+<p><code>retro-collection-tool --dry-run bios --all-systems --strict</code></p>
 <h2 id="export">export</h2>
 <p>Copies selected systems to another destination (for SD cards).</p>
 <p>Example:

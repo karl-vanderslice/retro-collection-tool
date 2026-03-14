@@ -93,6 +93,10 @@
               <ul class="nav flex-column">
               </ul>
             </li>
+            <li class="nav-item" data-bs-level="2"><a href="#bios" class="nav-link">BIOS</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
             <li class="nav-item" data-bs-level="2"><a href="#systems" class="nav-link">Systems</a>
               <ul class="nav flex-column">
               </ul>
@@ -138,6 +142,17 @@
 <h2 id="paths">Paths</h2>
 <p>All paths are relative to <code>root</code> unless absolute.</p>
 <p><code>paths.hacks_source</code> can be set to an absolute path (for example <code>/mnt/media-emulation/RetroLibrary/roms/Hacks</code>) to keep curated hacks outside the active merge root.</p>
+<p><code>paths.vault_bios</code> can point to a BIOS vault location used as one of the BIOS source roots.</p>
+<h2 id="bios">BIOS</h2>
+<p>BIOS imports are catalog-driven and enforce strict hash matching for known files.</p>
+<ul>
+<li><code>bios.catalog_file</code>: optional path to a custom BIOS catalog YAML.</li>
+<li>If omitted, the built-in default catalog is used.</li>
+<li>Relative paths are resolved from current working directory first, then from <code>root</code>.</li>
+<li><code>bios.source_roots</code>: directories scanned for BIOS files and zip packs.</li>
+</ul>
+<p>Only files that match both configured filename and MD5 are imported.
+Unknown files are skipped and reported.</p>
 <h2 id="systems">Systems</h2>
 <p>Each system includes:</p>
 <ul>
@@ -151,7 +166,7 @@
 </ul>
 <p>If <code>retail_dat_pattern</code> is omitted, <code>dat_pattern</code> is used for retail sync.</p>
 <p>Hacks do not require DAT files. The hacks workflow uses <code>rompatcherjs</code> and applies all discovered patch files in sorted filename order.</p>
-<p>BIOS, ReDump, and Arcade are currently feature-gated stubs and do not require per-system DAT keys yet.</p>
+<p>ReDump and Arcade are feature-gated stubs and do not require per-system DAT keys yet.</p>
 <p>Retail DAT selection always picks the latest matching <code>.dat</code> by modification time.</p>
 <h3 id="no-intro-mapping-reference">No-Intro Mapping Reference</h3>
 <p>The default config maps the following No-Intro folder names to internal system keys and ROMM slugs:</p>

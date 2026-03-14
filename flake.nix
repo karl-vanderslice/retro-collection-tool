@@ -47,6 +47,7 @@
             shellcheck
             shfmt
             mkdocs
+            gh
             findutils
             coreutils
             git

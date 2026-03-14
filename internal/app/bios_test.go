@@ -132,6 +132,42 @@ func TestRunBiosImportsKnownHashFromZipPack(t *testing.T) {
 	}
 }
 
+func TestRunBiosSkipsInvalidZipAndContinues(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "bios-source")
+	if err := os.MkdirAll(sourceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+
+	badZip := filepath.Join(sourceRoot, "bad.zip")
+	if err := os.WriteFile(badZip, []byte("not-a-valid-zip"), 0o644); err != nil {
+		t.Fatalf("write bad zip: %v", err)
+	}
+
+	good := filepath.Join(sourceRoot, "gba_bios.bin")
+	if err := os.WriteFile(good, []byte("abc"), 0o644); err != nil {
+		t.Fatalf("write good bios: %v", err)
+	}
+
+	catalog := "entries:\n  - system: gba\n    required: true\n    destination: gba_bios.bin\n    sources:\n      - name: gba_bios.bin\n        md5: 900150983cd24fb0d6963f7d28e17f72\n"
+	catalogPath := filepath.Join(root, "bios-catalog.yaml")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+
+	cfg := biosTestConfig(root, sourceRoot, catalogPath)
+	if err := runBios(cfg, globalFlags{}, []string{"--systems", "gba"}); err != nil {
+		t.Fatalf("runBios should continue past invalid zip: %v", err)
+	}
+
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	if _, err := os.Stat(vaultDst); err != nil {
+		t.Fatalf("expected BIOS output at %s: %v", vaultDst, err)
+	}
+}
+
 func biosTestConfig(root, sourceRoot, catalogPath string) *config.Config {
 	return &config.Config{
 		Root: root,

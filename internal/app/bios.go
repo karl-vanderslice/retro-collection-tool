@@ -65,6 +65,16 @@ type biosScanStats struct {
 	CacheHits  int
 	CacheMiss  int
 	ZipEntries int
+	BadZips    int
+}
+
+var errBiosScanComplete = errors.New("bios scan complete")
+
+type biosScanPlan struct {
+	targetNames          map[string]bool
+	keyToEntryIndices    map[string][]int
+	unresolvedEntryCount int
+	resolvedEntries      map[int]bool
 }
 
 type biosHashCache struct {
@@ -121,6 +131,12 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	if len(sourceRoots) == 0 {
 		return errors.New("bios.source_roots must include at least one directory")
 	}
+	plan := buildBiosScanPlan(catalog, systems)
+	if plan.unresolvedEntryCount == 0 {
+		emitInfo(g, "bios", "", "summary", outputFields{"imported": 0, "missing": 0, "unknown": 0})
+		return nil
+	}
+
 	if g.verbose {
 		emitInfo(g, "bios", "scan", "source roots", outputFields{"roots": strings.Join(sourceRoots, ", "), "recursive": true})
 	} else {
@@ -146,14 +162,20 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 			scanSpinner.Update(fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d latest=%s", stats.Scanned, stats.CacheHits, stats.CacheMiss, filepath.Base(path)))
 		}
 	}
+	onArchiveError := func(path string, err error) {
+		if !g.verbose {
+			return
+		}
+		emitInfo(g, "bios", "scan", "skipping unreadable archive", outputFields{"path": path, "error": err.Error()})
+	}
 
-	candidates, cacheDirty, scanStats, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache)
+	candidates, cacheDirty, scanStats, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache, plan, onArchiveError)
 	if err != nil {
 		scanSpinner.Stop(false, err.Error())
 		emitError(g, "bios", "scan", "scan failed", outputFields{"error": err.Error()})
 		return err
 	}
-	scanSpinner.Stop(true, fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d zip-entries=%d", scanStats.Scanned, scanStats.CacheHits, scanStats.CacheMiss, scanStats.ZipEntries))
+	scanSpinner.Stop(true, fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d zip-entries=%d bad-zips=%d", scanStats.Scanned, scanStats.CacheHits, scanStats.CacheMiss, scanStats.ZipEntries, scanStats.BadZips))
 	if cacheDirty {
 		saveCacheSpinner := newCommandSpinner(g, "bios", "cache", "writing md5 cache")
 		if err := saveBiosHashCache(cachePath, hashCache); err != nil {
@@ -276,7 +298,14 @@ func resolveBiosSourceRoots(cfg *config.Config) []string {
 	return dedupePreserveOrder(out)
 }
 
-func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(stats biosScanStats, path string), hashCache *biosHashCache) ([]biosCandidate, bool, biosScanStats, error) {
+func collectBiosCandidates(
+	sourceRoots []string,
+	verbose bool,
+	progress func(stats biosScanStats, path string),
+	hashCache *biosHashCache,
+	plan biosScanPlan,
+	onArchiveError func(path string, err error),
+) ([]biosCandidate, bool, biosScanStats, error) {
 	out := make([]biosCandidate, 0)
 	stats := biosScanStats{}
 	scanned := 0
@@ -306,19 +335,36 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sta
 			}
 			ext := strings.ToLower(filepath.Ext(path))
 			if ext == ".zip" {
-				zipItems, err := collectBiosCandidatesFromZip(path)
+				zipItems, err := collectBiosCandidatesFromZip(path, plan.targetNames)
 				if err != nil {
-					return err
+					stats.BadZips++
+					if onArchiveError != nil {
+						onArchiveError(path, err)
+					}
+					return nil
 				}
 				out = append(out, zipItems...)
-				for range zipItems {
+				for _, candidate := range zipItems {
 					scanned++
 					stats.ZipEntries++
+					markBiosPlanCandidate(&plan, candidate)
+					if biosPlanComplete(plan) {
+						stats.Scanned = scanned
+						if progress != nil {
+							progress(stats, path)
+						}
+						return errBiosScanComplete
+					}
 				}
 				stats.Scanned = scanned
 				if progress != nil {
 					progress(stats, path)
 				}
+				return nil
+			}
+
+			name := strings.ToLower(filepath.Base(path))
+			if !plan.targetNames[name] {
 				return nil
 			}
 
@@ -334,19 +380,29 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sta
 			}
 			out = append(out, biosCandidate{
 				Display:  path,
-				Name:     filepath.Base(path),
+				Name:     name,
 				MD5:      hash,
 				FilePath: path,
 			})
+			markBiosPlanCandidate(&plan, out[len(out)-1])
 			scanned++
 			stats.Scanned = scanned
 			if progress != nil {
 				progress(stats, path)
 			}
+			if biosPlanComplete(plan) {
+				return errBiosScanComplete
+			}
 			return nil
 		})
 		if err != nil {
+			if errors.Is(err, errBiosScanComplete) {
+				break
+			}
 			return nil, cacheDirty, stats, err
+		}
+		if biosPlanComplete(plan) {
+			break
 		}
 	}
 
@@ -356,7 +412,7 @@ func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(sta
 	return out, cacheDirty, stats, nil
 }
 
-func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
+func collectBiosCandidatesFromZip(zipPath string, targetNames map[string]bool) ([]biosCandidate, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("open zip %s: %w", zipPath, err)
@@ -374,6 +430,10 @@ func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
 		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
 			return nil, fmt.Errorf("zip %s contains unsafe path: %s", zipPath, f.Name)
 		}
+		base := strings.ToLower(filepath.Base(cleanName))
+		if !targetNames[base] {
+			continue
+		}
 
 		in, err := f.Open()
 		if err != nil {
@@ -390,13 +450,64 @@ func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
 
 		items = append(items, biosCandidate{
 			Display:  fmt.Sprintf("%s:%s", zipPath, cleanName),
-			Name:     filepath.Base(cleanName),
+			Name:     base,
 			MD5:      hex.EncodeToString(h.Sum(nil)),
 			ZipPath:  zipPath,
 			ZipEntry: cleanName,
 		})
 	}
 	return items, nil
+}
+
+func buildBiosScanPlan(catalog *biosCatalog, systems []string) biosScanPlan {
+	systemSet := map[string]bool{}
+	for _, s := range systems {
+		systemSet[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+	plan := biosScanPlan{
+		targetNames:          map[string]bool{},
+		keyToEntryIndices:    map[string][]int{},
+		unresolvedEntryCount: 0,
+		resolvedEntries:      map[int]bool{},
+	}
+	entryIdx := 0
+	for _, entry := range catalog.Entries {
+		systemKey := strings.ToLower(strings.TrimSpace(entry.System))
+		if !systemSet[systemKey] {
+			continue
+		}
+		plan.unresolvedEntryCount++
+		for _, src := range entry.Sources {
+			name := strings.ToLower(strings.TrimSpace(src.Name))
+			hash := strings.ToLower(strings.TrimSpace(src.MD5))
+			plan.targetNames[name] = true
+			key := biosMatchKey(name, hash)
+			plan.keyToEntryIndices[key] = append(plan.keyToEntryIndices[key], entryIdx)
+		}
+		entryIdx++
+	}
+	return plan
+}
+
+func markBiosPlanCandidate(plan *biosScanPlan, candidate biosCandidate) {
+	if plan == nil {
+		return
+	}
+	key := biosMatchKey(candidate.Name, candidate.MD5)
+	indices := plan.keyToEntryIndices[key]
+	for _, idx := range indices {
+		if plan.resolvedEntries[idx] {
+			continue
+		}
+		plan.resolvedEntries[idx] = true
+		if plan.unresolvedEntryCount > 0 {
+			plan.unresolvedEntryCount--
+		}
+	}
+}
+
+func biosPlanComplete(plan biosScanPlan) bool {
+	return plan.unresolvedEntryCount == 0
 }
 
 func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog, candidates []biosCandidate, g globalFlags, progress func(processed, total int, system, destination string)) (*biosSummary, error) {

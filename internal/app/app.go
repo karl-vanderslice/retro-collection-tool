@@ -46,6 +46,21 @@ var patchExtensions = map[string]bool{
 	".xdelta":  true,
 }
 
+var knownCommands = []string{
+	"sync",
+	"hacks",
+	"bios",
+	"redump",
+	"arcade",
+	"cache",
+	"clean",
+	"export",
+	"bootstrap",
+	"systems",
+	"version",
+	"help",
+}
+
 type globalFlags struct {
 	configPath string
 	dryRun     bool
@@ -118,12 +133,89 @@ func Run(args []string) error {
 		}
 		return nil
 	case "help", "-h", "--help":
+		if len(rest) > 1 {
+			if err := printCommandUsage(rest[1]); err != nil {
+				printRootUsage()
+				return err
+			}
+			return nil
+		}
 		printRootUsage()
 		return nil
 	default:
 		printRootUsage()
-		return fmt.Errorf("unknown command: %s", command)
+		return unknownCommandError(command)
 	}
+}
+
+func unknownCommandError(command string) error {
+	if suggestion := closestCommand(command); suggestion != "" {
+		return fmt.Errorf("unknown command: %s (did you mean %q?)", command, suggestion)
+	}
+	return fmt.Errorf("unknown command: %s", command)
+}
+
+func closestCommand(input string) string {
+	needle := strings.ToLower(strings.TrimSpace(input))
+	if needle == "" {
+		return ""
+	}
+	for _, cmd := range knownCommands {
+		if strings.HasPrefix(cmd, needle) || strings.HasPrefix(needle, cmd) {
+			return cmd
+		}
+	}
+	for _, cmd := range knownCommands {
+		if levenshteinDistance(needle, cmd) <= 2 {
+			return cmd
+		}
+	}
+	return ""
+}
+
+func levenshteinDistance(a, b string) int {
+	ra := []rune(a)
+	rb := []rune(b)
+	if len(ra) == 0 {
+		return len(rb)
+	}
+	if len(rb) == 0 {
+		return len(ra)
+	}
+
+	prev := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(ra); i++ {
+		curr := make([]int, len(rb)+1)
+		curr[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 0
+			if ra[i-1] != rb[j-1] {
+				cost = 1
+			}
+			curr[j] = minInt(
+				curr[j-1]+1,
+				prev[j]+1,
+				prev[j-1]+cost,
+			)
+		}
+		prev = curr
+	}
+
+	return prev[len(rb)]
+}
+
+func minInt(values ...int) int {
+	out := values[0]
+	for _, v := range values[1:] {
+		if v < out {
+			out = v
+		}
+	}
+	return out
 }
 
 func parseGlobalFlags(args []string) (globalFlags, []string, error) {
@@ -1172,7 +1264,89 @@ Commands:
   cache       Cache controls: clean|path
   bootstrap   Create expected directory structure
   systems     List enabled systems
-  version     Print version`) //nolint:lll
+	version     Print version
+
+Examples:
+	retro-collection-tool sync --systems snes,genesis
+	retro-collection-tool hacks --all-systems
+	retro-collection-tool bios --systems gba --strict
+	retro-collection-tool cache path
+	retro-collection-tool help export`) //nolint:lll
+}
+
+func printCommandUsage(command string) error {
+	switch strings.ToLower(strings.TrimSpace(command)) {
+	case "sync":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] sync --systems <slug[,slug...]> [--compress] [--no-hacks]
+	retro-collection-tool [global flags] sync --all-systems [--compress] [--no-hacks]
+
+Examples:
+	retro-collection-tool sync --systems snes,genesis
+	retro-collection-tool --dry-run sync --all-systems --compress`)
+	case "hacks":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] hacks --systems <slug[,slug...]>
+	retro-collection-tool [global flags] hacks --all-systems [--no-move-retail]
+
+Examples:
+	retro-collection-tool hacks --systems snes
+	retro-collection-tool --dry-run hacks --all-systems --no-move-retail`)
+	case "bios":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] bios --systems <slug[,slug...]> [--strict]
+	retro-collection-tool [global flags] bios --all-systems [--strict]
+
+Examples:
+	retro-collection-tool bios --systems gba
+	retro-collection-tool --dry-run bios --all-systems --strict`)
+	case "clean":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] clean --systems <slug[,slug...]> [--include-bios]
+	retro-collection-tool [global flags] clean --all-systems [--include-bios]
+
+Examples:
+	retro-collection-tool clean --systems snes
+	retro-collection-tool --dry-run clean --all-systems --include-bios`)
+	case "export":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] export --destination <path> --systems <slug[,slug...]>
+	retro-collection-tool [global flags] export --destination <path> --all-systems
+
+Examples:
+	retro-collection-tool export --destination /media/SDCARD --systems gba,gbc
+	retro-collection-tool --dry-run export --destination /media/SDCARD --all-systems`)
+	case "cache":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] cache clean
+	retro-collection-tool [global flags] cache path
+
+Examples:
+	retro-collection-tool cache clean
+	retro-collection-tool cache path`)
+	case "bootstrap":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] bootstrap
+
+Example:
+	retro-collection-tool bootstrap`)
+	case "systems":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] systems
+
+Example:
+	retro-collection-tool systems`)
+	case "version":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] version`)
+	case "redump", "arcade":
+		fmt.Printf("%s is currently stubbed behind a feature flag in config.\n", command)
+	case "help", "", "-h", "--help":
+		printRootUsage()
+	default:
+		return unknownCommandError(command)
+	}
+	return nil
 }
 
 func ensureNoPositionalArgs(command string, args []string) error {

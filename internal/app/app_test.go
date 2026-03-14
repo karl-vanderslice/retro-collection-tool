@@ -1,9 +1,12 @@
 package app
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -204,4 +207,70 @@ func TestOrganizeRetailFilesInRootSupportsExpandedSystemExtensions(t *testing.T)
 	if _, err := os.Stat(nonROMSrc); err != nil {
 		t.Fatalf("expected non-rom file to remain in root: %v", err)
 	}
+}
+
+func TestUnknownCommandErrorIncludesSuggestion(t *testing.T) {
+	t.Parallel()
+
+	err := unknownCommandError("syn")
+	if err == nil {
+		t.Fatal("expected unknown command error")
+	}
+	if !strings.Contains(err.Error(), "did you mean \"sync\"?") {
+		t.Fatalf("expected suggestion, got %q", err.Error())
+	}
+}
+
+func TestPrintCommandUsageExport(t *testing.T) {
+	t.Parallel()
+
+	out := captureStdoutForAppTest(t, func() {
+		if err := printCommandUsage("export"); err != nil {
+			t.Fatalf("printCommandUsage: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "--destination <path>") {
+		t.Fatalf("expected destination guidance, got %q", out)
+	}
+	if !strings.Contains(out, "retro-collection-tool export") {
+		t.Fatalf("expected export usage line, got %q", out)
+	}
+}
+
+func TestPrintCommandUsageUnknownReturnsError(t *testing.T) {
+	t.Parallel()
+
+	err := printCommandUsage("wut")
+	if err == nil {
+		t.Fatal("expected unknown command error")
+	}
+}
+
+func captureStdoutForAppTest(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() {
+		os.Stdout = orig
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("close reader: %v", err)
+	}
+	return buf.String()
 }

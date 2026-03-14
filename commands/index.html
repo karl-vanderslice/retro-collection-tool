@@ -35,19 +35,19 @@
                         <!-- Main navigation -->
                         <ul class="nav navbar-nav">
                             <li class="nav-item">
-                                <a href="../docs/index.md" class="nav-link">Home</a>
+                                <a href=".." class="nav-link">Home</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/configuration.md" class="nav-link">Configuration</a>
+                                <a href="../configuration/" class="nav-link">Configuration</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/commands.md" class="nav-link">Commands</a>
+                                <a href="./" class="nav-link active" aria-current="page">Commands</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/architecture.md" class="nav-link">Architecture</a>
+                                <a href="../architecture/" class="nav-link">Architecture</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/todo.md" class="nav-link">TODO</a>
+                                <a href="../todo/" class="nav-link">TODO</a>
                             </li>
                         </ul>
 
@@ -57,6 +57,16 @@
                                 <i class="fa fa-search"></i> Search
                             </a>
                         </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../configuration/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../architecture/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
                             <li class="nav-item">
                                 <a href="https://github.com/karl-vanderslice/retro-collection-tool/edit/master/docs/commands.md" class="nav-link">Edit on karl-vanderslice/retro-collection-tool
                                     </a>
@@ -150,9 +160,11 @@
 <h2 id="bios">bios</h2>
 <p>Imports BIOS files into ROMM Structure A targets:
 <code>roms/Library/bios/&lt;platform&gt;/...</code></p>
-<p>The BIOS workflow is feature-gated by <code>features.enable_bios</code> and uses strict known-file matching from a BIOS catalog.</p>
+<p>The BIOS workflow is feature-gated by <code>features.enable_bios</code> and uses catalog matching for known BIOS files.</p>
 <ul>
-<li>Matching requires both filename and MD5 hash from the catalog.</li>
+<li>Matching always uses filename from the catalog.</li>
+<li>If a catalog source includes MD5, hash must also match.</li>
+<li>If a catalog source omits MD5, filename-only matching is used.</li>
 <li>Unknown files are skipped and reported.</li>
 <li>Source roots can include raw files and zip packs.</li>
 </ul>

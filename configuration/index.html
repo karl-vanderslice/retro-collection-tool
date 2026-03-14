@@ -35,19 +35,19 @@
                         <!-- Main navigation -->
                         <ul class="nav navbar-nav">
                             <li class="nav-item">
-                                <a href="../docs/index.md" class="nav-link">Home</a>
+                                <a href=".." class="nav-link">Home</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/configuration.md" class="nav-link">Configuration</a>
+                                <a href="./" class="nav-link active" aria-current="page">Configuration</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/commands.md" class="nav-link">Commands</a>
+                                <a href="../commands/" class="nav-link">Commands</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/architecture.md" class="nav-link">Architecture</a>
+                                <a href="../architecture/" class="nav-link">Architecture</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../docs/todo.md" class="nav-link">TODO</a>
+                                <a href="../todo/" class="nav-link">TODO</a>
                             </li>
                         </ul>
 
@@ -57,6 +57,16 @@
                                 <i class="fa fa-search"></i> Search
                             </a>
                         </li>
+                            <li class="nav-item">
+                                <a rel="prev" href=".." class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../commands/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
                             <li class="nav-item">
                                 <a href="https://github.com/karl-vanderslice/retro-collection-tool/edit/master/docs/configuration.md" class="nav-link">Edit on karl-vanderslice/retro-collection-tool
                                     </a>
@@ -144,14 +154,15 @@
 <p><code>paths.hacks_source</code> can be set to an absolute path (for example <code>/mnt/media-emulation/RetroLibrary/roms/Hacks</code>) to keep curated hacks outside the active merge root.</p>
 <p><code>paths.vault_bios</code> can point to a BIOS vault location used as one of the BIOS source roots.</p>
 <h2 id="bios">BIOS</h2>
-<p>BIOS imports are catalog-driven and enforce strict hash matching for known files.</p>
+<p>BIOS imports are catalog-driven and can enforce hash matching for known files.</p>
 <ul>
 <li><code>bios.catalog_file</code>: optional path to a custom BIOS catalog YAML.</li>
 <li>If omitted, the built-in default catalog is used.</li>
 <li>Relative paths are resolved from current working directory first, then from <code>root</code>.</li>
 <li><code>bios.source_roots</code>: directories scanned for BIOS files and zip packs.</li>
 </ul>
-<p>Only files that match both configured filename and MD5 are imported.
+<p>Only files that match configured catalog names are imported.
+When a source MD5 is provided in the catalog, the hash must match as well.
 Unknown files are skipped and reported.</p>
 <h2 id="systems">Systems</h2>
 <p>Each system includes:</p>
@@ -166,7 +177,7 @@ Unknown files are skipped and reported.</p>
 </ul>
 <p>If <code>retail_dat_pattern</code> is omitted, <code>dat_pattern</code> is used for retail sync.</p>
 <p>Hacks do not require DAT files. The hacks workflow uses <code>rompatcherjs</code> and applies all discovered patch files in sorted filename order.</p>
-<p>ReDump and Arcade are feature-gated stubs and do not require per-system DAT keys yet.</p>
+<p>Arcade remains feature-gated. ReDump is supported through per-system <code>retail_dat_source: redump</code>.</p>
 <p>Retail DAT selection always picks the latest matching <code>.dat</code> by modification time.</p>
 <h3 id="no-intro-mapping-reference">No-Intro Mapping Reference</h3>
 <p>The default config maps the following No-Intro folder names to internal system keys and ROMM slugs:</p>

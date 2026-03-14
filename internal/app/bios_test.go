@@ -35,9 +35,18 @@ func TestRunBiosImportsKnownHashMatch(t *testing.T) {
 		t.Fatalf("runBios: %v", err)
 	}
 
-	dst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
-	if _, err := os.Stat(dst); err != nil {
-		t.Fatalf("expected BIOS output at %s: %v", dst, err)
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	libraryDst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
+	vaultInfo, err := os.Stat(vaultDst)
+	if err != nil {
+		t.Fatalf("expected BIOS vault output at %s: %v", vaultDst, err)
+	}
+	libraryInfo, err := os.Stat(libraryDst)
+	if err != nil {
+		t.Fatalf("expected BIOS library output at %s: %v", libraryDst, err)
+	}
+	if !os.SameFile(vaultInfo, libraryInfo) {
+		t.Fatalf("expected hardlinked files for vault and library outputs")
 	}
 }
 
@@ -108,9 +117,18 @@ func TestRunBiosImportsKnownHashFromZipPack(t *testing.T) {
 		t.Fatalf("runBios from zip: %v", err)
 	}
 
-	dst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
-	if _, err := os.Stat(dst); err != nil {
-		t.Fatalf("expected BIOS output at %s: %v", dst, err)
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	libraryDst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
+	vaultInfo, err := os.Stat(vaultDst)
+	if err != nil {
+		t.Fatalf("expected BIOS vault output at %s: %v", vaultDst, err)
+	}
+	libraryInfo, err := os.Stat(libraryDst)
+	if err != nil {
+		t.Fatalf("expected BIOS library output at %s: %v", libraryDst, err)
+	}
+	if !os.SameFile(vaultInfo, libraryInfo) {
+		t.Fatalf("expected hardlinked files for vault and library outputs")
 	}
 }
 
@@ -119,6 +137,7 @@ func biosTestConfig(root, sourceRoot, catalogPath string) *config.Config {
 		Root: root,
 		Paths: config.PathsConfig{
 			RommLibraryBios: "roms/Library/bios",
+			VaultBios:       "roms/Vault/BIOS",
 		},
 		Bios: config.BiosConfig{
 			CatalogFile: catalogPath,

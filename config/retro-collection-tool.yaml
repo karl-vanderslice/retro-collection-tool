@@ -15,7 +15,6 @@ bios:
   catalog_file: config/bios-catalog.yaml
   source_roots:
     - bios
-    - roms/Vault/BIOS
 
 paths:
   vault_no_intro: roms/Vault/NoIntro/NoIntro

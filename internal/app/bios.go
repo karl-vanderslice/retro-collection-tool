@@ -60,6 +60,17 @@ type biosSummary struct {
 	Unknown  []string
 }
 
+type biosHashCache struct {
+	Version int                           `yaml:"version"`
+	Entries map[string]biosHashCacheEntry `yaml:"entries"`
+}
+
+type biosHashCacheEntry struct {
+	Size    int64  `yaml:"size"`
+	ModUnix int64  `yaml:"mod_unix"`
+	MD5     string `yaml:"md5"`
+}
+
 func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	if !cfg.Features.EnableBios {
 		return errors.New("bios workflow disabled in config.features.enable_bios")
@@ -83,6 +94,8 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 		return err
 	}
 
+	fmt.Printf("[bios] accepted: systems=%s strict=%t dry-run=%t\n", strings.Join(systems, ","), bf.strict, g.dryRun)
+
 	catalog, err := loadBiosCatalog(cfg)
 	if err != nil {
 		return err
@@ -90,15 +103,39 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	if len(catalog.Entries) == 0 {
 		return errors.New("bios catalog has no entries")
 	}
+	fmt.Printf("[bios] loaded catalog entries: %d\n", len(catalog.Entries))
 
 	sourceRoots := resolveBiosSourceRoots(cfg)
 	if len(sourceRoots) == 0 {
 		return errors.New("bios.source_roots must include at least one directory")
 	}
-	candidates, err := collectBiosCandidates(sourceRoots, g.verbose)
+	fmt.Printf("[bios] scanning source roots recursively: %s\n", strings.Join(sourceRoots, ", "))
+
+	cachePath := filepath.Join(resolveCacheRoot(cfg), "bios_md5_cache.yaml")
+	hashCache, err := loadBiosHashCache(cachePath)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("[bios] loaded md5 cache entries: %d (%s)\n", len(hashCache.Entries), cachePath)
+
+	progress := func(scanned int, path string) {
+		if scanned == 1 || scanned%250 == 0 {
+			fmt.Printf("[bios] scanned candidates=%d (latest: %s)\n", scanned, path)
+		}
+	}
+
+	candidates, cacheDirty, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("[bios] scan complete: %d candidate files\n", len(candidates))
+	if cacheDirty {
+		if err := saveBiosHashCache(cachePath, hashCache); err != nil {
+			return err
+		}
+		fmt.Printf("[bios] updated md5 cache: %s\n", cachePath)
+	}
+	fmt.Println("[bios] matching against catalog and importing")
 
 	summary, err := syncBiosEntries(cfg, systems, catalog, candidates, g)
 	if err != nil {
@@ -111,9 +148,15 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	for _, line := range summary.Missing {
 		fmt.Println(line)
 	}
-	for _, line := range summary.Unknown {
-		fmt.Println(line)
+	if g.verbose {
+		for _, line := range summary.Unknown {
+			fmt.Println(line)
+		}
+	} else if len(summary.Unknown) > 0 {
+		fmt.Printf("[bios] skipped unknown candidates: %d (use --verbose for details)\n", len(summary.Unknown))
 	}
+
+	fmt.Printf("[bios] summary: imported=%d missing=%d unknown=%d\n", len(summary.Imported), len(summary.Missing), len(summary.Unknown))
 
 	if bf.strict && len(summary.Missing) > 0 {
 		return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.Missing))
@@ -179,6 +222,7 @@ func parseBiosCatalog(data []byte) (*biosCatalog, error) {
 
 func resolveBiosSourceRoots(cfg *config.Config) []string {
 	out := make([]string, 0, len(cfg.Bios.SourceRoots)+2)
+	out = append(out, cfg.ResolvePath("bios"))
 	for _, root := range cfg.Bios.SourceRoots {
 		trimmed := strings.TrimSpace(root)
 		if trimmed == "" {
@@ -189,8 +233,10 @@ func resolveBiosSourceRoots(cfg *config.Config) []string {
 	return dedupePreserveOrder(out)
 }
 
-func collectBiosCandidates(sourceRoots []string, verbose bool) ([]biosCandidate, error) {
+func collectBiosCandidates(sourceRoots []string, verbose bool, progress func(scanned int, path string), hashCache *biosHashCache) ([]biosCandidate, bool, error) {
 	out := make([]biosCandidate, 0)
+	scanned := 0
+	cacheDirty := false
 
 	for _, root := range sourceRoots {
 		info, err := os.Stat(root)
@@ -201,7 +247,7 @@ func collectBiosCandidates(sourceRoots []string, verbose bool) ([]biosCandidate,
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, cacheDirty, err
 		}
 		if !info.IsDir() {
 			continue
@@ -221,12 +267,21 @@ func collectBiosCandidates(sourceRoots []string, verbose bool) ([]biosCandidate,
 					return err
 				}
 				out = append(out, zipItems...)
+				for range zipItems {
+					scanned++
+				}
+				if progress != nil {
+					progress(scanned, path)
+				}
 				return nil
 			}
 
-			hash, err := md5Path(path)
+			hash, changed, err := md5PathCached(path, hashCache)
 			if err != nil {
 				return err
+			}
+			if changed {
+				cacheDirty = true
 			}
 			out = append(out, biosCandidate{
 				Display:  path,
@@ -234,17 +289,21 @@ func collectBiosCandidates(sourceRoots []string, verbose bool) ([]biosCandidate,
 				MD5:      hash,
 				FilePath: path,
 			})
+			scanned++
+			if progress != nil {
+				progress(scanned, path)
+			}
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, cacheDirty, err
 		}
 	}
 
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Display < out[j].Display
 	})
-	return out, nil
+	return out, cacheDirty, nil
 }
 
 func collectBiosCandidatesFromZip(zipPath string) ([]biosCandidate, error) {
@@ -328,16 +387,22 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		}
 
 		usedCandidates[match.Display] = true
-		dst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
+		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
+		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
 		if g.dryRun {
-			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios import %s -> %s", match.Display, dst))
+			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios copy %s -> %s", match.Display, vaultDst))
+			summary.Imported = append(summary.Imported, fmt.Sprintf("[dry-run] bios link %s -> %s", vaultDst, libraryDst))
 			continue
 		}
 
-		if err := copyBiosCandidate(*match, dst); err != nil {
+		if err := copyBiosCandidate(*match, vaultDst); err != nil {
 			return nil, err
 		}
-		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] imported %s -> %s", match.Display, dst))
+		if err := fsutil.LinkOrCopy(vaultDst, libraryDst); err != nil {
+			return nil, err
+		}
+		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] copied %s -> %s", match.Display, vaultDst))
+		summary.Imported = append(summary.Imported, fmt.Sprintf("[bios] linked %s -> %s", vaultDst, libraryDst))
 	}
 
 	for _, c := range candidates {
@@ -453,4 +518,63 @@ func isMD5Hex(v string) bool {
 		}
 	}
 	return true
+}
+
+func loadBiosHashCache(path string) (*biosHashCache, error) {
+	cache := &biosHashCache{Version: 1, Entries: map[string]biosHashCacheEntry{}}
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return cache, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read bios hash cache %s: %w", path, err)
+	}
+	if err := yaml.Unmarshal(b, cache); err != nil {
+		return nil, fmt.Errorf("parse bios hash cache %s: %w", path, err)
+	}
+	if cache.Entries == nil {
+		cache.Entries = map[string]biosHashCacheEntry{}
+	}
+	if cache.Version != 1 {
+		cache.Version = 1
+		cache.Entries = map[string]biosHashCacheEntry{}
+	}
+	return cache, nil
+}
+
+func saveBiosHashCache(path string, cache *biosHashCache) error {
+	if err := fsutil.EnsureDir(filepath.Dir(path)); err != nil {
+		return err
+	}
+	b, err := yaml.Marshal(cache)
+	if err != nil {
+		return fmt.Errorf("marshal bios hash cache: %w", err)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return fmt.Errorf("write bios hash cache %s: %w", path, err)
+	}
+	return nil
+}
+
+func md5PathCached(path string, cache *biosHashCache) (string, bool, error) {
+	if cache == nil {
+		h, err := md5Path(path)
+		return h, false, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", false, err
+	}
+	key := filepath.Clean(path)
+	if cached, ok := cache.Entries[key]; ok {
+		if cached.Size == info.Size() && cached.ModUnix == info.ModTime().Unix() && isMD5Hex(cached.MD5) {
+			return strings.ToLower(cached.MD5), false, nil
+		}
+	}
+	hash, err := md5Path(path)
+	if err != nil {
+		return "", false, err
+	}
+	cache.Entries[key] = biosHashCacheEntry{Size: info.Size(), ModUnix: info.ModTime().Unix(), MD5: hash}
+	return hash, true, nil
 }

@@ -51,7 +51,7 @@ BIOS imports are catalog-driven and can enforce hash matching for known files.
 - `bios.source_roots`: directories scanned for BIOS files and zip packs.
 
 Only files that match configured catalog names are imported.
-When a source MD5 is provided in the catalog, the hash must match as well.
+When a source includes signatures (`md5`, `sha1`, `sha256`, `crc32`), all provided signatures must match.
 Unknown files are skipped and reported.
 
 ## Systems

@@ -3,11 +3,14 @@ package app
 import (
 	"archive/zip"
 	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,14 +44,20 @@ type biosCatalogEntry struct {
 }
 
 type biosCatalogSource struct {
-	Name string `yaml:"name"`
-	MD5  string `yaml:"md5"`
+	Name   string `yaml:"name"`
+	MD5    string `yaml:"md5"`
+	SHA1   string `yaml:"sha1"`
+	SHA256 string `yaml:"sha256"`
+	CRC32  string `yaml:"crc32"`
 }
 
 type biosCandidate struct {
 	Display  string
 	Name     string
 	MD5      string
+	SHA1     string
+	SHA256   string
+	CRC32    string
 	FilePath string
 	ZipPath  string
 	ZipEntry string
@@ -72,7 +81,8 @@ var errBiosScanComplete = errors.New("bios scan complete")
 
 type biosScanPlan struct {
 	targetNames          map[string]bool
-	keyToEntryIndices    map[string][]int
+	entries              []biosCatalogEntry
+	nameToEntryIndices   map[string][]int
 	unresolvedEntryCount int
 	resolvedEntries      map[int]bool
 }
@@ -86,6 +96,9 @@ type biosHashCacheEntry struct {
 	Size    int64  `yaml:"size"`
 	ModUnix int64  `yaml:"mod_unix"`
 	MD5     string `yaml:"md5"`
+	SHA1    string `yaml:"sha1"`
+	SHA256  string `yaml:"sha256"`
+	CRC32   string `yaml:"crc32"`
 }
 
 func runBios(cfg *config.Config, g globalFlags, args []string) error {
@@ -144,7 +157,7 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	}
 
 	cachePath := filepath.Join(resolveCacheRoot(cfg), "bios_md5_cache.yaml")
-	cacheSpinner := newCommandSpinner(g, "bios", "cache", "loading md5 cache")
+	cacheSpinner := newCommandSpinner(g, "bios", "cache", "loading hash cache")
 	hashCache, err := loadBiosHashCache(cachePath)
 	if err != nil {
 		cacheSpinner.Stop(false, err.Error())
@@ -305,6 +318,18 @@ func parseBiosCatalog(data []byte) (*biosCatalog, error) {
 			if md5Value != "" && !isMD5Hex(md5Value) {
 				return nil, fmt.Errorf("bios catalog entry %d source %d has invalid md5", i, j)
 			}
+			sha1Value := strings.TrimSpace(s.SHA1)
+			if sha1Value != "" && !isSHA1Hex(sha1Value) {
+				return nil, fmt.Errorf("bios catalog entry %d source %d has invalid sha1", i, j)
+			}
+			sha256Value := strings.TrimSpace(s.SHA256)
+			if sha256Value != "" && !isSHA256Hex(sha256Value) {
+				return nil, fmt.Errorf("bios catalog entry %d source %d has invalid sha256", i, j)
+			}
+			crc32Value := strings.TrimSpace(s.CRC32)
+			if crc32Value != "" && !isCRC32Hex(crc32Value) {
+				return nil, fmt.Errorf("bios catalog entry %d source %d has invalid crc32", i, j)
+			}
 		}
 	}
 
@@ -394,7 +419,7 @@ func collectBiosCandidates(
 				return nil
 			}
 
-			hash, changed, err := md5PathCached(path, hashCache)
+			hashes, changed, err := hashesPathCached(path, hashCache)
 			if err != nil {
 				return err
 			}
@@ -407,7 +432,10 @@ func collectBiosCandidates(
 			out = append(out, biosCandidate{
 				Display:  path,
 				Name:     name,
-				MD5:      hash,
+				MD5:      hashes.MD5,
+				SHA1:     hashes.SHA1,
+				SHA256:   hashes.SHA256,
+				CRC32:    hashes.CRC32,
 				FilePath: path,
 			})
 			markBiosPlanCandidate(&plan, out[len(out)-1])
@@ -465,8 +493,8 @@ func collectBiosCandidatesFromZip(zipPath string, targetNames map[string]bool) (
 		if err != nil {
 			return nil, fmt.Errorf("open zip entry %s in %s: %w", f.Name, zipPath, err)
 		}
-		h := md5.New()
-		if _, err := io.Copy(h, in); err != nil {
+		hashes, err := computeHashesFromReader(in)
+		if err != nil {
 			_ = in.Close()
 			return nil, fmt.Errorf("hash zip entry %s in %s: %w", f.Name, zipPath, err)
 		}
@@ -477,7 +505,10 @@ func collectBiosCandidatesFromZip(zipPath string, targetNames map[string]bool) (
 		items = append(items, biosCandidate{
 			Display:  fmt.Sprintf("%s:%s", zipPath, cleanName),
 			Name:     base,
-			MD5:      hex.EncodeToString(h.Sum(nil)),
+			MD5:      hashes.MD5,
+			SHA1:     hashes.SHA1,
+			SHA256:   hashes.SHA256,
+			CRC32:    hashes.CRC32,
 			ZipPath:  zipPath,
 			ZipEntry: cleanName,
 		})
@@ -492,28 +523,24 @@ func buildBiosScanPlan(catalog *biosCatalog, systems []string) biosScanPlan {
 	}
 	plan := biosScanPlan{
 		targetNames:          map[string]bool{},
-		keyToEntryIndices:    map[string][]int{},
+		entries:              make([]biosCatalogEntry, 0),
+		nameToEntryIndices:   map[string][]int{},
 		unresolvedEntryCount: 0,
 		resolvedEntries:      map[int]bool{},
 	}
-	entryIdx := 0
 	for _, entry := range catalog.Entries {
 		systemKey := strings.ToLower(strings.TrimSpace(entry.System))
 		if !systemSet[systemKey] {
 			continue
 		}
+		entryIdx := len(plan.entries)
+		plan.entries = append(plan.entries, entry)
 		plan.unresolvedEntryCount++
 		for _, src := range entry.Sources {
 			name := strings.ToLower(strings.TrimSpace(src.Name))
-			hash := strings.ToLower(strings.TrimSpace(src.MD5))
 			plan.targetNames[name] = true
-			if hash == "" {
-				hash = "*"
-			}
-			key := biosMatchKey(name, hash)
-			plan.keyToEntryIndices[key] = append(plan.keyToEntryIndices[key], entryIdx)
+			plan.nameToEntryIndices[name] = append(plan.nameToEntryIndices[name], entryIdx)
 		}
-		entryIdx++
 	}
 	return plan
 }
@@ -522,12 +549,12 @@ func markBiosPlanCandidate(plan *biosScanPlan, candidate biosCandidate) {
 	if plan == nil {
 		return
 	}
-	exactKey := biosMatchKey(candidate.Name, candidate.MD5)
-	indices := append([]int{}, plan.keyToEntryIndices[exactKey]...)
-	nameOnlyKey := biosMatchKey(candidate.Name, "*")
-	indices = append(indices, plan.keyToEntryIndices[nameOnlyKey]...)
+	indices := plan.nameToEntryIndices[strings.ToLower(candidate.Name)]
 	for _, idx := range indices {
 		if plan.resolvedEntries[idx] {
+			continue
+		}
+		if !entryHasMatchingSource(plan.entries[idx], candidate) {
 			continue
 		}
 		plan.resolvedEntries[idx] = true
@@ -553,28 +580,22 @@ func findExistingVaultMatch(vaultPath string, entry biosCatalogEntry) (*biosCand
 		return nil, nil
 	}
 
-	for _, src := range entry.Sources {
-		if strings.TrimSpace(src.MD5) == "" {
-			return &biosCandidate{
-				Display:  vaultPath,
-				Name:     filepath.Base(vaultPath),
-				FilePath: vaultPath,
-			}, nil
-		}
-	}
-
-	hash, err := md5Path(vaultPath)
+	hashes, err := hashesPath(vaultPath)
 	if err != nil {
 		return nil, err
 	}
+	candidate := biosCandidate{
+		Display:  vaultPath,
+		Name:     filepath.Base(vaultPath),
+		MD5:      hashes.MD5,
+		SHA1:     hashes.SHA1,
+		SHA256:   hashes.SHA256,
+		CRC32:    hashes.CRC32,
+		FilePath: vaultPath,
+	}
 	for _, src := range entry.Sources {
-		if strings.EqualFold(strings.TrimSpace(src.MD5), hash) {
-			return &biosCandidate{
-				Display:  vaultPath,
-				Name:     filepath.Base(vaultPath),
-				MD5:      hash,
-				FilePath: vaultPath,
-			}, nil
+		if sourceMatchesCandidate(src, candidate) {
+			return &candidate, nil
 		}
 	}
 	return nil, nil
@@ -614,11 +635,8 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		systemSet[s] = true
 	}
 
-	nameAndHashToCandidates := map[string][]biosCandidate{}
 	nameToCandidates := map[string][]biosCandidate{}
 	for _, c := range candidates {
-		key := biosMatchKey(c.Name, c.MD5)
-		nameAndHashToCandidates[key] = append(nameAndHashToCandidates[key], c)
 		nameToCandidates[strings.ToLower(c.Name)] = append(nameToCandidates[strings.ToLower(c.Name)], c)
 	}
 
@@ -668,7 +686,7 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 			continue
 		}
 
-		match, mismatchedNames := findCatalogEntryMatch(entry, nameAndHashToCandidates, nameToCandidates)
+		match, mismatchedNames := findCatalogEntryMatch(entry, nameToCandidates)
 		if match == nil {
 			if entry.Required {
 				summary.Missing = append(summary.Missing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, libraryName))
@@ -702,30 +720,18 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 	return summary, nil
 }
 
-func findCatalogEntryMatch(entry biosCatalogEntry, byNameHash map[string][]biosCandidate, byName map[string][]biosCandidate) (*biosCandidate, []string) {
+func findCatalogEntryMatch(entry biosCatalogEntry, byName map[string][]biosCandidate) (*biosCandidate, []string) {
 	mismatches := make([]string, 0)
 	for _, src := range entry.Sources {
 		name := strings.ToLower(strings.TrimSpace(src.Name))
-		hash := strings.ToLower(strings.TrimSpace(src.MD5))
-		if hash == "" {
-			matches := byName[name]
-			if len(matches) > 0 {
-				m := matches[0]
+		for _, candidate := range byName[name] {
+			if sourceMatchesCandidate(src, candidate) {
+				m := candidate
 				return &m, mismatches
 			}
-			continue
-		}
-		matches := byNameHash[biosMatchKey(name, hash)]
-		if len(matches) > 0 {
-			m := matches[0]
-			return &m, mismatches
-		}
-
-		for _, candidate := range byName[name] {
-			if strings.EqualFold(candidate.MD5, hash) {
-				continue
+			if sourceHasHashes(src) {
+				mismatches = append(mismatches, fmt.Sprintf("[bios] hash mismatch for %s: got %s expected %s (%s)", src.Name, candidateHashSummary(candidate), sourceHashSummary(src), candidate.Display))
 			}
-			mismatches = append(mismatches, fmt.Sprintf("[bios] hash mismatch for %s: got %s expected %s (%s)", src.Name, candidate.MD5, hash, candidate.Display))
 		}
 	}
 	return nil, mismatches
@@ -782,29 +788,52 @@ func copyZipEntry(zipPath, entryName, dst string) error {
 	return fmt.Errorf("zip entry not found: %s in %s", entryName, zipPath)
 }
 
-func biosMatchKey(name, md5Hash string) string {
-	return strings.ToLower(strings.TrimSpace(name)) + "|" + strings.ToLower(strings.TrimSpace(md5Hash))
-}
-
-func md5Path(path string) (string, error) {
+func hashesPath(path string) (biosHashCacheEntry, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return biosHashCacheEntry{}, err
 	}
 	defer func() {
 		_ = f.Close()
 	}()
+	return computeHashesFromReader(f)
+}
 
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+func computeHashesFromReader(r io.Reader) (biosHashCacheEntry, error) {
+	hMD5 := md5.New()
+	hSHA1 := sha1.New()
+	hSHA256 := sha256.New()
+	hCRC32 := crc32.NewIEEE()
+	if _, err := io.Copy(io.MultiWriter(hMD5, hSHA1, hSHA256, hCRC32), r); err != nil {
+		return biosHashCacheEntry{}, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return biosHashCacheEntry{
+		MD5:    hex.EncodeToString(hMD5.Sum(nil)),
+		SHA1:   hex.EncodeToString(hSHA1.Sum(nil)),
+		SHA256: hex.EncodeToString(hSHA256.Sum(nil)),
+		CRC32:  fmt.Sprintf("%08x", hCRC32.Sum32()),
+	}, nil
 }
 
 func isMD5Hex(v string) bool {
+	return isHexLen(v, 32)
+}
+
+func isSHA1Hex(v string) bool {
+	return isHexLen(v, 40)
+}
+
+func isSHA256Hex(v string) bool {
+	return isHexLen(v, 64)
+}
+
+func isCRC32Hex(v string) bool {
+	return isHexLen(v, 8)
+}
+
+func isHexLen(v string, length int) bool {
 	v = strings.TrimSpace(v)
-	if len(v) != 32 {
+	if len(v) != length {
 		return false
 	}
 	for _, r := range v {
@@ -815,8 +844,71 @@ func isMD5Hex(v string) bool {
 	return true
 }
 
+func sourceHasHashes(src biosCatalogSource) bool {
+	return strings.TrimSpace(src.MD5) != "" || strings.TrimSpace(src.SHA1) != "" || strings.TrimSpace(src.SHA256) != "" || strings.TrimSpace(src.CRC32) != ""
+}
+
+func sourceMatchesCandidate(src biosCatalogSource, candidate biosCandidate) bool {
+	if !strings.EqualFold(strings.TrimSpace(src.Name), strings.TrimSpace(candidate.Name)) {
+		return false
+	}
+	if v := strings.TrimSpace(src.MD5); v != "" && !strings.EqualFold(v, strings.TrimSpace(candidate.MD5)) {
+		return false
+	}
+	if v := strings.TrimSpace(src.SHA1); v != "" && !strings.EqualFold(v, strings.TrimSpace(candidate.SHA1)) {
+		return false
+	}
+	if v := strings.TrimSpace(src.SHA256); v != "" && !strings.EqualFold(v, strings.TrimSpace(candidate.SHA256)) {
+		return false
+	}
+	if v := strings.TrimSpace(src.CRC32); v != "" && !strings.EqualFold(v, strings.TrimSpace(candidate.CRC32)) {
+		return false
+	}
+	return true
+}
+
+func sourceHashSummary(src biosCatalogSource) string {
+	parts := make([]string, 0, 4)
+	if v := strings.TrimSpace(src.MD5); v != "" {
+		parts = append(parts, "md5="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(src.SHA1); v != "" {
+		parts = append(parts, "sha1="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(src.SHA256); v != "" {
+		parts = append(parts, "sha256="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(src.CRC32); v != "" {
+		parts = append(parts, "crc32="+strings.ToLower(v))
+	}
+	if len(parts) == 0 {
+		return "name-only"
+	}
+	return strings.Join(parts, " ")
+}
+
+func candidateHashSummary(c biosCandidate) string {
+	parts := make([]string, 0, 4)
+	if v := strings.TrimSpace(c.MD5); v != "" {
+		parts = append(parts, "md5="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(c.SHA1); v != "" {
+		parts = append(parts, "sha1="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(c.SHA256); v != "" {
+		parts = append(parts, "sha256="+strings.ToLower(v))
+	}
+	if v := strings.TrimSpace(c.CRC32); v != "" {
+		parts = append(parts, "crc32="+strings.ToLower(v))
+	}
+	if len(parts) == 0 {
+		return "no-hash"
+	}
+	return strings.Join(parts, " ")
+}
+
 func loadBiosHashCache(path string) (*biosHashCache, error) {
-	cache := &biosHashCache{Version: 1, Entries: map[string]biosHashCacheEntry{}}
+	cache := &biosHashCache{Version: 2, Entries: map[string]biosHashCacheEntry{}}
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return cache, nil
@@ -830,8 +922,8 @@ func loadBiosHashCache(path string) (*biosHashCache, error) {
 	if cache.Entries == nil {
 		cache.Entries = map[string]biosHashCacheEntry{}
 	}
-	if cache.Version != 1 {
-		cache.Version = 1
+	if cache.Version != 2 {
+		cache.Version = 2
 		cache.Entries = map[string]biosHashCacheEntry{}
 	}
 	return cache, nil
@@ -851,27 +943,48 @@ func saveBiosHashCache(path string, cache *biosHashCache) error {
 	return nil
 }
 
-func md5PathCached(path string, cache *biosHashCache) (string, bool, error) {
+func hashesPathCached(path string, cache *biosHashCache) (biosHashCacheEntry, bool, error) {
 	if cache == nil {
-		h, err := md5Path(path)
+		h, err := hashesPath(path)
 		return h, false, err
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", false, err
+		return biosHashCacheEntry{}, false, err
 	}
 	key := filepath.Clean(path)
 	if cached, ok := cache.Entries[key]; ok {
-		if cached.Size == info.Size() && cached.ModUnix == info.ModTime().Unix() && isMD5Hex(cached.MD5) {
-			return strings.ToLower(cached.MD5), false, nil
+		if cached.Size == info.Size() && cached.ModUnix == info.ModTime().Unix() && isMD5Hex(cached.MD5) && isSHA1Hex(cached.SHA1) && isSHA256Hex(cached.SHA256) && isCRC32Hex(cached.CRC32) {
+			return biosHashCacheEntry{
+				MD5:    strings.ToLower(cached.MD5),
+				SHA1:   strings.ToLower(cached.SHA1),
+				SHA256: strings.ToLower(cached.SHA256),
+				CRC32:  strings.ToLower(cached.CRC32),
+			}, false, nil
 		}
 	}
-	hash, err := md5Path(path)
+	hashes, err := hashesPath(path)
 	if err != nil {
-		return "", false, err
+		return biosHashCacheEntry{}, false, err
 	}
-	cache.Entries[key] = biosHashCacheEntry{Size: info.Size(), ModUnix: info.ModTime().Unix(), MD5: hash}
-	return hash, true, nil
+	cache.Entries[key] = biosHashCacheEntry{
+		Size:    info.Size(),
+		ModUnix: info.ModTime().Unix(),
+		MD5:     hashes.MD5,
+		SHA1:    hashes.SHA1,
+		SHA256:  hashes.SHA256,
+		CRC32:   hashes.CRC32,
+	}
+	return hashes, true, nil
+}
+
+func entryHasMatchingSource(entry biosCatalogEntry, candidate biosCandidate) bool {
+	for _, src := range entry.Sources {
+		if sourceMatchesCandidate(src, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func isSafeRelativePath(p string) bool {

@@ -50,7 +50,7 @@ Imports BIOS files into ROMM Structure A targets:
 The BIOS workflow is feature-gated by `features.enable_bios` and uses catalog matching for known BIOS files.
 
 - Matching always uses filename from the catalog.
-- If a catalog source includes MD5, hash must also match.
+- If a catalog source includes one or more signatures (`md5`, `sha1`, `sha256`, `crc32`), every provided signature must match.
 - If a catalog source omits MD5, filename-only matching is used.
 - Unknown files are skipped and reported.
 - Source roots can include raw files and zip packs.

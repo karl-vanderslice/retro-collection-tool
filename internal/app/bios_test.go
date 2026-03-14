@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
@@ -326,5 +327,126 @@ func TestDefaultBiosCatalogCoversEnabledSystems(t *testing.T) {
 		if !hasCatalog[system] {
 			t.Fatalf("enabled system %q missing BIOS catalog entries", system)
 		}
+	}
+}
+
+func TestRunBiosRequiresAllProvidedHashesToMatch(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "bios-source")
+	if err := os.MkdirAll(sourceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+
+	src := filepath.Join(sourceRoot, "gba_bios.bin")
+	if err := os.WriteFile(src, []byte("abc"), 0o644); err != nil {
+		t.Fatalf("write source bios: %v", err)
+	}
+
+	catalog := strings.Join([]string{
+		"entries:",
+		"  - system: gba",
+		"    required: true",
+		"    destination: gba_bios.bin",
+		"    sources:",
+		"      - name: gba_bios.bin",
+		"        md5: 900150983cd24fb0d6963f7d28e17f72",
+		"        sha1: a9993e364706816aba3e25717850c26c9cd0d89d",
+		"        sha256: ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+		"        crc32: 352441c2",
+	}, "\n") + "\n"
+	catalogPath := filepath.Join(root, "bios-catalog.yaml")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+
+	cfg := biosTestConfig(root, sourceRoot, catalogPath)
+	if err := runBios(cfg, globalFlags{}, []string{"--systems", "gba"}); err != nil {
+		t.Fatalf("runBios: %v", err)
+	}
+
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba_bios.bin")
+	if _, err := os.Stat(vaultDst); err != nil {
+		t.Fatalf("expected BIOS vault output at %s: %v", vaultDst, err)
+	}
+}
+
+func TestRunBiosFailsWhenAnyProvidedHashMismatches(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "bios-source")
+	if err := os.MkdirAll(sourceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+
+	src := filepath.Join(sourceRoot, "gba_bios.bin")
+	if err := os.WriteFile(src, []byte("abc"), 0o644); err != nil {
+		t.Fatalf("write source bios: %v", err)
+	}
+
+	catalog := strings.Join([]string{
+		"entries:",
+		"  - system: gba",
+		"    required: true",
+		"    destination: gba_bios.bin",
+		"    sources:",
+		"      - name: gba_bios.bin",
+		"        md5: 900150983cd24fb0d6963f7d28e17f72",
+		"        sha1: 0000000000000000000000000000000000000000",
+	}, "\n") + "\n"
+	catalogPath := filepath.Join(root, "bios-catalog.yaml")
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+
+	cfg := biosTestConfig(root, sourceRoot, catalogPath)
+	err := runBios(cfg, globalFlags{}, []string{"--systems", "gba", "--strict"})
+	if err == nil {
+		t.Fatal("expected strict mode failure for sha1 mismatch")
+	}
+}
+
+func TestParseBiosCatalogRejectsInvalidSHAFormats(t *testing.T) {
+	t.Parallel()
+
+	badCatalog := strings.Join([]string{
+		"entries:",
+		"  - system: gba",
+		"    required: true",
+		"    destination: gba_bios.bin",
+		"    sources:",
+		"      - name: gba_bios.bin",
+		"        sha1: not-a-sha1",
+	}, "\n") + "\n"
+	if _, err := parseBiosCatalog([]byte(badCatalog)); err == nil {
+		t.Fatal("expected parse error for invalid sha1")
+	}
+
+	badCatalog = strings.Join([]string{
+		"entries:",
+		"  - system: gba",
+		"    required: true",
+		"    destination: gba_bios.bin",
+		"    sources:",
+		"      - name: gba_bios.bin",
+		"        sha256: not-a-sha256",
+	}, "\n") + "\n"
+	if _, err := parseBiosCatalog([]byte(badCatalog)); err == nil {
+		t.Fatal("expected parse error for invalid sha256")
+	}
+
+	badCatalog = strings.Join([]string{
+		"entries:",
+		"  - system: gba",
+		"    required: true",
+		"    destination: gba_bios.bin",
+		"    sources:",
+		"      - name: gba_bios.bin",
+		"        crc32: nothex",
+	}, "\n") + "\n"
+	if _, err := parseBiosCatalog([]byte(badCatalog)); err == nil {
+		t.Fatal("expected parse error for invalid crc32")
 	}
 }

@@ -291,6 +291,9 @@ func parseBiosCatalog(data []byte) (*biosCatalog, error) {
 		if strings.TrimSpace(e.Destination) == "" {
 			return nil, fmt.Errorf("bios catalog entry %d missing destination", i)
 		}
+		if !isSafeRelativePath(e.Destination) {
+			return nil, fmt.Errorf("bios catalog entry %d has unsafe destination path: %s", i, e.Destination)
+		}
 		if len(e.Sources) == 0 {
 			return nil, fmt.Errorf("bios catalog entry %d has no sources", i)
 		}
@@ -573,11 +576,10 @@ func countEntriesNeedingScan(cfg *config.Config, systems []string, catalog *bios
 		if !systemSet[systemKey] {
 			continue
 		}
-		sysCfg, ok := cfg.Systems[systemKey]
-		if !ok {
+		if _, ok := cfg.Systems[systemKey]; !ok {
 			continue
 		}
-		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
+		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), entry.Destination)
 		match, err := findExistingVaultMatch(vaultDst, entry)
 		if err != nil {
 			return 0, err
@@ -631,8 +633,9 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 			return nil, fmt.Errorf("bios catalog references unknown system: %s", systemKey)
 		}
 
-		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), sysCfg.RommSlug, entry.Destination)
-		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, entry.Destination)
+		vaultDst := filepath.Join(cfg.ResolvePath(cfg.Paths.VaultBios), entry.Destination)
+		libraryName := filepath.Base(filepath.Clean(entry.Destination))
+		libraryDst := filepath.Join(cfg.ResolvePath(cfg.Paths.RommLibraryBios), sysCfg.RommSlug, libraryName)
 		vaultMatch, err := findExistingVaultMatch(vaultDst, entry)
 		if err != nil {
 			return nil, err
@@ -652,7 +655,7 @@ func syncBiosEntries(cfg *config.Config, systems []string, catalog *biosCatalog,
 		match, mismatchedNames := findCatalogEntryMatch(entry, nameAndHashToCandidates, nameToCandidates)
 		if match == nil {
 			if entry.Required {
-				summary.Missing = append(summary.Missing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, entry.Destination))
+				summary.Missing = append(summary.Missing, fmt.Sprintf("[bios] missing required %s/%s", sysCfg.RommSlug, libraryName))
 			}
 			summary.Missing = append(summary.Missing, mismatchedNames...)
 			continue
@@ -845,4 +848,15 @@ func md5PathCached(path string, cache *biosHashCache) (string, bool, error) {
 	}
 	cache.Entries[key] = biosHashCacheEntry{Size: info.Size(), ModUnix: info.ModTime().Unix(), MD5: hash}
 	return hash, true, nil
+}
+
+func isSafeRelativePath(p string) bool {
+	clean := filepath.Clean(strings.TrimSpace(p))
+	if clean == "." || clean == "" {
+		return false
+	}
+	if filepath.IsAbs(clean) {
+		return false
+	}
+	return !strings.HasPrefix(clean, "..")
 }

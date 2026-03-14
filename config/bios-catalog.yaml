@@ -140,7 +140,7 @@ entries:
 
   - system: dreamcast
     required: false
-    destination: dc_boot.bin
+    destination: dc/dc_boot.bin
     sources:
       - name: dc_boot.bin
         md5: e10c53c2f8b90bab96ead2d368858623

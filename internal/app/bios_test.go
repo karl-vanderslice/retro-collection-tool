@@ -35,7 +35,7 @@ func TestRunBiosImportsKnownHashMatch(t *testing.T) {
 		t.Fatalf("runBios: %v", err)
 	}
 
-	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba_bios.bin")
 	libraryDst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
 	vaultInfo, err := os.Stat(vaultDst)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestRunBiosImportsKnownHashFromZipPack(t *testing.T) {
 		t.Fatalf("runBios from zip: %v", err)
 	}
 
-	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba_bios.bin")
 	libraryDst := filepath.Join(root, "roms", "Library", "bios", "gba", "gba_bios.bin")
 	vaultInfo, err := os.Stat(vaultDst)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestRunBiosSkipsInvalidZipAndContinues(t *testing.T) {
 		t.Fatalf("runBios should continue past invalid zip: %v", err)
 	}
 
-	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba", "gba_bios.bin")
+	vaultDst := filepath.Join(root, "roms", "Vault", "BIOS", "gba_bios.bin")
 	if _, err := os.Stat(vaultDst); err != nil {
 		t.Fatalf("expected BIOS output at %s: %v", vaultDst, err)
 	}
@@ -177,7 +177,7 @@ func TestRunBiosEarlyCheckUsesExistingVaultFile(t *testing.T) {
 		t.Fatalf("mkdir source: %v", err)
 	}
 
-	vaultDir := filepath.Join(root, "roms", "Vault", "BIOS", "gba")
+	vaultDir := filepath.Join(root, "roms", "Vault", "BIOS")
 	if err := os.MkdirAll(vaultDir, 0o755); err != nil {
 		t.Fatalf("mkdir vault: %v", err)
 	}

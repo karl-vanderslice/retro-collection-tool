@@ -240,6 +240,9 @@ entries:
     sources:
       - name: panafz1.bin
 
+        md5: f47264dd47fe30f73ab3c010015c155b
+        sha1: 34bf189111295f74d7b7dfc1f304d98b8d36325a
+        crc32: c8c8ff89
   - system: 3ds
     required: false
     destination: citra/keys/aes_keys.txt
@@ -276,18 +279,27 @@ entries:
     sources:
       - name: lynxboot.img
 
+        md5: fcd403db69f54290b51035d82f835e7b
+        sha1: e4ed47fae31693e016b081c6bda48da5b70d7ccb
+        crc32: 0d973c9d
   - system: msx
     required: false
     destination: MSX.ROM
     sources:
       - name: MSX.ROM
 
+        md5: aa95aea2563cd5ec0a0919b44cc17d47
+        sha1: 409e82adac40f6bdd18eb6c84e8b2fbdc7fb5498
+        crc32: 94ee12f3
   - system: msx2
     required: false
     destination: MSX2.ROM
     sources:
       - name: MSX2.ROM
 
+        md5: ec3a01c91f24fbddcbcab0ad301bc9ef
+        sha1: 6103b39f1e38d1aa2d84b1c3219c44f1abb5436e
+        crc32: 6cdaf3a5
   - system: n64
     required: false
     destination: pifdata.bin
@@ -300,18 +312,27 @@ entries:
     sources:
       - name: bios7.bin
 
+        md5: df692a80a5b1bc90728bc3dfc76cd948
+        sha1: 24f67bdea115a2c847c8813a262502ee1607b7df
+        crc32: 1280f0d5
   - system: nds
     required: false
     destination: bios9.bin
     sources:
       - name: bios9.bin
 
+        md5: a392174eb3e572fed6447e956bde4b25
+        sha1: bfaac75f101c135e32e2aaf541de6b1be4c8c62d
+        crc32: 2ab23573
   - system: nds
     required: false
     destination: firmware.bin
     sources:
       - name: firmware.bin
 
+        md5: e45033d9b0fa6b0de071292bba7c9d13
+        sha1: cfe072921ee3fb93f688743f8beef89043c3e9ad
+        crc32: 945f9dc9
   - system: nintendo-dsi
     required: false
     destination: dsi_bios7.bin
@@ -342,6 +363,9 @@ entries:
     sources:
       - name: neogeo.zip
 
+        md5: 00dad01abdbf8ea9e79ad2fe11bdb182
+        sha1: deb62b0074b8cae4f162c257662136733cfc76ad
+        crc32: 81315163
   - system: neo-geo-cd
     required: false
     destination: neocdz.zip

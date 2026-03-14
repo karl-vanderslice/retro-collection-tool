@@ -41,6 +41,7 @@
             go
             gopls
             golangci-lint
+            ripgrep
             nodejs_22
             nodePackages.prettier
             shellcheck

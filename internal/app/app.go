@@ -50,6 +50,7 @@ type globalFlags struct {
 	configPath string
 	dryRun     bool
 	verbose    bool
+	outputMode string
 }
 
 func Run(args []string) error {
@@ -77,9 +78,9 @@ func Run(args []string) error {
 		return fmt.Errorf("load config layers %v: %w", configPaths, err)
 	}
 	if globals.verbose {
-		fmt.Printf("[config] merged layers (low->high): %s\n", strings.Join(configPaths, " -> "))
+		emitInfo(globals, "config", "", "merged layers", outputFields{"layers": strings.Join(configPaths, " -> ")})
 		if strings.TrimSpace(os.Getenv(rootEnvVar)) != "" {
-			fmt.Printf("[config] root override via %s\n", rootEnvVar)
+			emitInfo(globals, "config", "", "root override active", outputFields{"env": rootEnvVar})
 		}
 	}
 
@@ -99,17 +100,21 @@ func Run(args []string) error {
 	case "arcade":
 		return runArcadeStub(cfg)
 	case "cache":
-		return runCache(cfg, rest[1:])
+		return runCache(cfg, globals, rest[1:])
 	case "clean":
 		return runClean(cfg, globals, rest[1:])
 	case "export":
 		return runExport(cfg, globals, rest[1:])
 	case "bootstrap":
-		return runBootstrap(cfg)
+		return runBootstrap(cfg, globals)
 	case "systems":
-		return runSystems(cfg)
+		return runSystems(cfg, globals)
 	case "version":
-		fmt.Println("retro-collection-tool dev")
+		if globals.isJSONOutput() {
+			emitInfo(globals, "version", "", "version", outputFields{"value": "retro-collection-tool dev"})
+		} else {
+			fmt.Println("retro-collection-tool dev")
+		}
 		return nil
 	case "help", "-h", "--help":
 		printRootUsage()
@@ -127,9 +132,21 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	fs.StringVar(&g.configPath, "config", "", "path to YAML config (default discovery: cwd then XDG)")
 	fs.BoolVar(&g.dryRun, "dry-run", false, "print planned actions without making changes")
 	fs.BoolVar(&g.verbose, "verbose", false, "verbose logs")
+	fs.StringVar(&g.outputMode, "output", outputModeHuman, "output mode: human|json")
+	jsonFlag := fs.Bool("json", false, "shorthand for --output json")
 
 	if err := fs.Parse(args); err != nil {
 		return g, nil, err
+	}
+	if *jsonFlag {
+		g.outputMode = outputModeJSON
+	}
+	g.outputMode = strings.ToLower(strings.TrimSpace(g.outputMode))
+	if g.outputMode == "" {
+		g.outputMode = outputModeHuman
+	}
+	if g.outputMode != outputModeHuman && g.outputMode != outputModeJSON {
+		return g, nil, fmt.Errorf("invalid --output mode %q (supported: human,json)", g.outputMode)
 	}
 	return g, fs.Args(), nil
 }
@@ -237,40 +254,43 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[sync] accepted: systems=%s compress=%t dry-run=%t no-hacks=%t\n", strings.Join(systems, ","), sf.compress, g.dryRun, sf.noHacks)
+	emitInfo(g, "sync", "", "accepted", outputFields{"systems": strings.Join(systems, ","), "compress": sf.compress, "dry_run": g.dryRun, "no_hacks": sf.noHacks})
 
-	retailSpinner := newCommandSpinner("sync", "retail", "running retail sync with igir")
+	retailSpinner := newCommandSpinner(g, "sync", "retail", "running retail sync with igir")
 	for i, system := range systems {
 		retailSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := syncRetailSystem(ctx, cfg, runner, g, system, sf.compress); err != nil {
 			retailSpinner.Stop(false, err.Error())
+			emitError(g, "sync", "retail", "system failed", outputFields{"system": system, "error": err.Error()})
 			return err
 		}
 	}
 	retailSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
 
 	if !sf.noHacks {
-		hacksSpinner := newCommandSpinner("sync", "hacks", "building hacks overlays")
+		hacksSpinner := newCommandSpinner(g, "sync", "hacks", "building hacks overlays")
 		for i, system := range systems {
 			hacksSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 			if err := runHacksSystem(ctx, cfg, g, system, true); err != nil {
 				hacksSpinner.Stop(false, err.Error())
+				emitError(g, "sync", "hacks", "system failed", outputFields{"system": system, "error": err.Error()})
 				return err
 			}
 		}
 		hacksSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
 	}
 
-	organizeSpinner := newCommandSpinner("sync", "organize", "organizing retail layout")
+	organizeSpinner := newCommandSpinner(g, "sync", "organize", "organizing retail layout")
 	for i, system := range systems {
 		organizeSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := organizeSystemLayout(cfg, g, system); err != nil {
 			organizeSpinner.Stop(false, err.Error())
+			emitError(g, "sync", "organize", "system failed", outputFields{"system": system, "error": err.Error()})
 			return err
 		}
 	}
 	organizeSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
-	fmt.Printf("[sync] summary: systems=%d dry-run=%t\n", len(systems), g.dryRun)
+	emitInfo(g, "sync", "", "summary", outputFields{"systems": len(systems), "dry_run": g.dryRun})
 	return nil
 }
 
@@ -341,11 +361,11 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 		args = append(args, "--zip")
 	}
 	if g.verbose {
-		fmt.Printf("[sync] [retail] system=%s dat=%s output=%s\n", system, datPath, rommDir)
-		fmt.Printf("[sync] [retail] system=%s source=%s input=%s\n", system, source, inputRoot)
+		emitInfo(g, "sync", "retail", "resolved inputs", outputFields{"system": system, "dat": datPath, "output": rommDir})
+		emitInfo(g, "sync", "retail", "resolved source", outputFields{"system": system, "source": source, "input": inputRoot})
 	}
 	if g.dryRun {
-		fmt.Printf("[sync] [retail] dry-run system=%s igir %s\n", system, strings.Join(args, " "))
+		emitInfo(g, "sync", "retail", "dry-run igir command", outputFields{"system": system, "cmd": strings.Join(args, " ")})
 		return nil
 	}
 	return runner.Run(ctx, args)
@@ -375,28 +395,30 @@ func runHacks(ctx context.Context, cfg *config.Config, g globalFlags, args []str
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[hacks] accepted: systems=%s dry-run=%t no-move-retail=%t\n", strings.Join(systems, ","), g.dryRun, hf.noMoveRetail)
+	emitInfo(g, "hacks", "", "accepted", outputFields{"systems": strings.Join(systems, ","), "dry_run": g.dryRun, "no_move_retail": hf.noMoveRetail})
 
-	buildSpinner := newCommandSpinner("hacks", "build", "building curated hacks")
+	buildSpinner := newCommandSpinner(g, "hacks", "build", "building curated hacks")
 	for i, system := range systems {
 		buildSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := runHacksSystem(ctx, cfg, g, system, !hf.noMoveRetail); err != nil {
 			buildSpinner.Stop(false, err.Error())
+			emitError(g, "hacks", "build", "system failed", outputFields{"system": system, "error": err.Error()})
 			return err
 		}
 	}
 	buildSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
 
-	organizeSpinner := newCommandSpinner("hacks", "organize", "organizing retail layout")
+	organizeSpinner := newCommandSpinner(g, "hacks", "organize", "organizing retail layout")
 	for i, system := range systems {
 		organizeSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := organizeSystemLayout(cfg, g, system); err != nil {
 			organizeSpinner.Stop(false, err.Error())
+			emitError(g, "hacks", "organize", "system failed", outputFields{"system": system, "error": err.Error()})
 			return err
 		}
 	}
 	organizeSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
-	fmt.Printf("[hacks] summary: systems=%d dry-run=%t\n", len(systems), g.dryRun)
+	emitInfo(g, "hacks", "", "summary", outputFields{"systems": len(systems), "dry_run": g.dryRun})
 	return nil
 }
 
@@ -940,7 +962,7 @@ func runArcadeStub(cfg *config.Config) error {
 	return errors.New("arcade workflow is stubbed; implementation planned in next phase")
 }
 
-func runCache(cfg *config.Config, args []string) error {
+func runCache(cfg *config.Config, g globalFlags, args []string) error {
 	if len(args) == 0 {
 		return errors.New("cache requires subcommand: clean|path")
 	}
@@ -953,9 +975,17 @@ func runCache(cfg *config.Config, args []string) error {
 	}
 	switch args[0] {
 	case "clean":
-		return fsutil.RemoveIfExists(cacheRoot)
+		if err := fsutil.RemoveIfExists(cacheRoot); err != nil {
+			return err
+		}
+		emitInfo(g, "cache", "", "cleaned", outputFields{"path": cacheRoot})
+		return nil
 	case "path":
-		fmt.Println(cacheRoot)
+		if g.isJSONOutput() {
+			emitInfo(g, "cache", "", "path", outputFields{"path": cacheRoot})
+		} else {
+			fmt.Println(cacheRoot)
+		}
 		return nil
 	default:
 		return fmt.Errorf("unknown cache subcommand: %s", args[0])
@@ -1067,7 +1097,7 @@ func copyDirRecursive(src, dst string) error {
 	})
 }
 
-func runBootstrap(cfg *config.Config) error {
+func runBootstrap(cfg *config.Config, g globalFlags) error {
 	dirs := []string{
 		cfg.ResolvePath(cfg.Paths.RommLibraryRoms),
 		cfg.ResolvePath(cfg.Paths.RommLibraryBios),
@@ -1096,12 +1126,17 @@ func runBootstrap(cfg *config.Config) error {
 			return err
 		}
 	}
+	emitInfo(g, "bootstrap", "", "completed", outputFields{"romm_roms": len(cfg.Bootstrap.RommRoms), "romm_bios": len(cfg.Bootstrap.RommBios)})
 	return nil
 }
 
-func runSystems(cfg *config.Config) error {
+func runSystems(cfg *config.Config, g globalFlags) error {
 	enabled := cfg.EnabledSystems()
 	sort.Strings(enabled)
+	if g.isJSONOutput() {
+		emitInfo(g, "systems", "", "enabled systems", outputFields{"systems": enabled, "count": len(enabled)})
+		return nil
+	}
 	for _, s := range enabled {
 		fmt.Println(s)
 	}
@@ -1118,6 +1153,8 @@ Global flags:
 	--config <path>       YAML config path (default discovery via cwd, then XDG)
   --dry-run             Plan-only mode
   --verbose             Verbose output
+	--output <mode>       Output mode: human|json (default: human)
+	--json                Shorthand for --output json
 
 Commands:
   sync        Run retail sync with Igir

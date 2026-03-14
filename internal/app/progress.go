@@ -19,15 +19,20 @@ type commandSpinner struct {
 	frames []string
 	idx    int
 	done   chan struct{}
+	silent bool
 }
 
-func newCommandSpinner(prefix, phase, status string) *commandSpinner {
+func newCommandSpinner(g globalFlags, prefix, phase, status string) *commandSpinner {
 	s := &commandSpinner{
 		prefix: prefix,
 		phase:  phase,
 		status: strings.TrimSpace(status),
 		frames: []string{"-", "\\", "|", "/"},
 		done:   make(chan struct{}),
+		silent: g.isJSONOutput(),
+	}
+	if s.silent {
+		return s
 	}
 
 	s.active = stdoutIsTerminal()
@@ -51,9 +56,9 @@ func (s *commandSpinner) run() {
 			s.mu.Lock()
 			frame := s.frames[s.idx%len(s.frames)]
 			s.idx++
-			status := s.status
+			status := truncateStatus(s.status, 96)
 			s.mu.Unlock()
-			fmt.Printf("\r[%s] [%s] %s %s", s.prefix, s.phase, frame, status)
+			fmt.Printf("\r\033[2K[%s] [%s] %s %s", s.prefix, s.phase, frame, status)
 		}
 	}
 }
@@ -65,13 +70,16 @@ func (s *commandSpinner) Update(status string) {
 }
 
 func (s *commandSpinner) Stop(ok bool, final string) {
+	if s.silent {
+		return
+	}
 	if s.active {
 		close(s.done)
 		label := "done"
 		if !ok {
 			label = "fail"
 		}
-		fmt.Printf("\r[%s] [%s] %s %s\n", s.prefix, s.phase, label, strings.TrimSpace(final))
+		fmt.Printf("\r\033[2K[%s] [%s] %s %s\n", s.prefix, s.phase, label, truncateStatus(strings.TrimSpace(final), 120))
 		return
 	}
 
@@ -88,4 +96,15 @@ func stdoutIsTerminal() bool {
 		return false
 	}
 	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func truncateStatus(status string, max int) string {
+	status = strings.TrimSpace(status)
+	if max <= 0 || len(status) <= max {
+		return status
+	}
+	if max <= 3 {
+		return status[:max]
+	}
+	return status[:max-3] + "..."
 }

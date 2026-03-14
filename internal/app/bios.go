@@ -101,16 +101,18 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 		return err
 	}
 
-	fmt.Printf("[bios] accepted: systems=%s strict=%t dry-run=%t\n", strings.Join(systems, ","), bf.strict, g.dryRun)
+	emitInfo(g, "bios", "", "accepted", outputFields{"systems": strings.Join(systems, ","), "strict": bf.strict, "dry_run": g.dryRun})
 
-	loadSpinner := newCommandSpinner("bios", "catalog", "loading BIOS catalog")
+	loadSpinner := newCommandSpinner(g, "bios", "catalog", "loading BIOS catalog")
 	catalog, err := loadBiosCatalog(cfg)
 	if err != nil {
 		loadSpinner.Stop(false, err.Error())
+		emitError(g, "bios", "catalog", "load failed", outputFields{"error": err.Error()})
 		return err
 	}
 	if len(catalog.Entries) == 0 {
 		loadSpinner.Stop(false, "catalog has no entries")
+		emitError(g, "bios", "catalog", "catalog has no entries", nil)
 		return errors.New("bios catalog has no entries")
 	}
 	loadSpinner.Stop(true, fmt.Sprintf("loaded entries=%d", len(catalog.Entries)))
@@ -120,21 +122,22 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 		return errors.New("bios.source_roots must include at least one directory")
 	}
 	if g.verbose {
-		fmt.Printf("[bios] source roots (recursive): %s\n", strings.Join(sourceRoots, ", "))
+		emitInfo(g, "bios", "scan", "source roots", outputFields{"roots": strings.Join(sourceRoots, ", "), "recursive": true})
 	} else {
-		fmt.Printf("[bios] source roots: %d\n", len(sourceRoots))
+		emitInfo(g, "bios", "scan", "source roots", outputFields{"count": len(sourceRoots), "recursive": true})
 	}
 
 	cachePath := filepath.Join(resolveCacheRoot(cfg), "bios_md5_cache.yaml")
-	cacheSpinner := newCommandSpinner("bios", "cache", "loading md5 cache")
+	cacheSpinner := newCommandSpinner(g, "bios", "cache", "loading md5 cache")
 	hashCache, err := loadBiosHashCache(cachePath)
 	if err != nil {
 		cacheSpinner.Stop(false, err.Error())
+		emitError(g, "bios", "cache", "load failed", outputFields{"error": err.Error(), "path": cachePath})
 		return err
 	}
 	cacheSpinner.Stop(true, fmt.Sprintf("entries=%d path=%s", len(hashCache.Entries), cachePath))
 
-	scanSpinner := newCommandSpinner("bios", "scan", "walking files and hashing candidates")
+	scanSpinner := newCommandSpinner(g, "bios", "scan", "walking files and hashing candidates")
 	progress := func(stats biosScanStats, path string) {
 		if !g.verbose {
 			return
@@ -147,19 +150,21 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	candidates, cacheDirty, scanStats, err := collectBiosCandidates(sourceRoots, g.verbose, progress, hashCache)
 	if err != nil {
 		scanSpinner.Stop(false, err.Error())
+		emitError(g, "bios", "scan", "scan failed", outputFields{"error": err.Error()})
 		return err
 	}
 	scanSpinner.Stop(true, fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d zip-entries=%d", scanStats.Scanned, scanStats.CacheHits, scanStats.CacheMiss, scanStats.ZipEntries))
 	if cacheDirty {
-		saveCacheSpinner := newCommandSpinner("bios", "cache", "writing md5 cache")
+		saveCacheSpinner := newCommandSpinner(g, "bios", "cache", "writing md5 cache")
 		if err := saveBiosHashCache(cachePath, hashCache); err != nil {
 			saveCacheSpinner.Stop(false, err.Error())
+			emitError(g, "bios", "cache", "write failed", outputFields{"error": err.Error(), "path": cachePath})
 			return err
 		}
 		saveCacheSpinner.Stop(true, fmt.Sprintf("updated %s", cachePath))
 	}
 
-	matchSpinner := newCommandSpinner("bios", "match", "matching catalog entries and importing")
+	matchSpinner := newCommandSpinner(g, "bios", "match", "matching catalog entries and importing")
 	matchProgress := func(processed, total int, system, destination string) {
 		if !g.verbose {
 			return
@@ -172,6 +177,7 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	summary, err := syncBiosEntries(cfg, systems, catalog, candidates, g, matchProgress)
 	if err != nil {
 		matchSpinner.Stop(false, err.Error())
+		emitError(g, "bios", "match", "import failed", outputFields{"error": err.Error()})
 		return err
 	}
 	matchSpinner.Stop(true, fmt.Sprintf("imported=%d missing=%d", len(summary.Imported), len(summary.Missing)))
@@ -187,13 +193,13 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 			fmt.Println(line)
 		}
 	} else if len(summary.Unknown) > 0 {
-		fmt.Printf("[bios] skipped unknown candidates: %d (use --verbose for details)\n", len(summary.Unknown))
+		emitInfo(g, "bios", "match", "skipped unknown candidates", outputFields{"count": len(summary.Unknown), "hint": "use --verbose for details"})
 	}
 	if len(summary.Missing) > 0 {
-		fmt.Printf("[bios] missing catalog entries: %d (use --verbose for details)\n", len(summary.Missing))
+		emitInfo(g, "bios", "match", "missing catalog entries", outputFields{"count": len(summary.Missing), "hint": "use --verbose for details"})
 	}
 
-	fmt.Printf("[bios] summary: imported=%d missing=%d unknown=%d\n", len(summary.Imported), len(summary.Missing), len(summary.Unknown))
+	emitInfo(g, "bios", "", "summary", outputFields{"imported": len(summary.Imported), "missing": len(summary.Missing), "unknown": len(summary.Unknown)})
 
 	if bf.strict && len(summary.Missing) > 0 {
 		return fmt.Errorf("bios strict mode failed: %d required entries missing", len(summary.Missing))

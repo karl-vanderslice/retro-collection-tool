@@ -119,7 +119,11 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	if len(sourceRoots) == 0 {
 		return errors.New("bios.source_roots must include at least one directory")
 	}
-	fmt.Printf("[bios] source roots (recursive): %s\n", strings.Join(sourceRoots, ", "))
+	if g.verbose {
+		fmt.Printf("[bios] source roots (recursive): %s\n", strings.Join(sourceRoots, ", "))
+	} else {
+		fmt.Printf("[bios] source roots: %d\n", len(sourceRoots))
+	}
 
 	cachePath := filepath.Join(resolveCacheRoot(cfg), "bios_md5_cache.yaml")
 	cacheSpinner := newCommandSpinner("bios", "cache", "loading md5 cache")
@@ -132,8 +136,11 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 
 	scanSpinner := newCommandSpinner("bios", "scan", "walking files and hashing candidates")
 	progress := func(stats biosScanStats, path string) {
-		if stats.Scanned == 1 || stats.Scanned%100 == 0 {
-			scanSpinner.Update(fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d latest=%s", stats.Scanned, stats.CacheHits, stats.CacheMiss, path))
+		if !g.verbose {
+			return
+		}
+		if stats.Scanned == 1 || stats.Scanned%500 == 0 {
+			scanSpinner.Update(fmt.Sprintf("candidates=%d cache-hit=%d cache-miss=%d latest=%s", stats.Scanned, stats.CacheHits, stats.CacheMiss, filepath.Base(path)))
 		}
 	}
 
@@ -154,6 +161,9 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 
 	matchSpinner := newCommandSpinner("bios", "match", "matching catalog entries and importing")
 	matchProgress := func(processed, total int, system, destination string) {
+		if !g.verbose {
+			return
+		}
 		if processed == 1 || processed%10 == 0 || processed == total {
 			matchSpinner.Update(fmt.Sprintf("processed=%d/%d system=%s target=%s", processed, total, system, destination))
 		}

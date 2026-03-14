@@ -1,6 +1,6 @@
 # Configuration
 
-Config is merged in layers (low to high precedence):
+Configuration is merged in layers (low to high precedence):
 
 1. XDG user config:
    - `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
@@ -17,6 +17,13 @@ Finally, `RETRO_COLLECTION_TOOL_ROOT` overrides merged `root`.
 
 When `XDG_CONFIG_HOME` is unset, `~/.config` is used.
 
+## Recommended Setup
+
+- Keep machine-specific `root` out of repository-tracked config.
+- Put personal overrides in XDG user config.
+- Use `RETRO_COLLECTION_TOOL_ROOT` in automation or temporary shells.
+- Treat `--config` as a final override for one-off runs.
+
 ## Core
 
 - `root`: absolute path to RetroLibrary root. Recommended to keep in XDG user config or `RETRO_COLLECTION_TOOL_ROOT`, not in repo config.
@@ -27,9 +34,9 @@ If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-t
 ## Igir
 
 - `binary`: preferred executable (default `igir`).
-- `use_npx_fallback`: use `npx --yes igir@latest` if `igir` is unavailable.
-- `prefer_region`, `prefer_language`: applied to sync operations.
-- `input_checksum_min`: checksum floor, e.g. `CRC32`.
+- `use_npx_fallback`: when true, use `npx --yes igir@latest` if `igir` is unavailable.
+- `prefer_region`, `prefer_language`: applied during retail sync selection.
+- `input_checksum_min`: checksum floor, for example `CRC32`.
 - `cache_retail_file`, `cache_hacks_file`: cache file names.
 - `allow_compression_zip`: gate for `sync --compress`.
 
@@ -73,6 +80,12 @@ Hacks do not require DAT files. The hacks workflow uses `rompatcherjs` and appli
 Arcade remains feature-gated. ReDump is supported through per-system `retail_dat_source: redump`.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
+
+## Validation Expectations
+
+- Unknown fields are rejected.
+- Invalid or missing required values fail early with descriptive messages.
+- Feature-gated workflows must be explicitly enabled before use.
 
 ### No-Intro Mapping Reference
 

@@ -47,6 +47,7 @@
             shellcheck
             shfmt
             mkdocs
+            pkgs.python3Packages."mkdocs-material"
             gh
             findutils
             coreutils

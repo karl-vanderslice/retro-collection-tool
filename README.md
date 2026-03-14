@@ -1,99 +1,92 @@
 # retro-collection-tool
 
-Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), designed to curate ROM libraries for [ROMM](https://github.com/rommapp/romm).
+Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), built to curate ROM libraries for [ROMM](https://github.com/rommapp/romm).
 
-## Highlights
+## Documentation
 
-- Config-driven workflows with strict validation.
-- Retail sync via hardlinks using latest matching DAT from No-Intro or ReDump.
-- Curated hacks flow that patches from `roms/Hacks/<system>/<hack-name>/` and writes ROMM-compatible output.
-- BIOS import workflow with catalog-based filename matching and optional MD5 validation.
-- Export selected systems to an SD card destination.
-- Explicit feature-flagged stubs for Arcade.
+- Docs site: <https://karl-vanderslice.github.io/retro-collection-tool/>
+- Docs source: `docs/`
+
+## What It Does
+
+- Runs repeatable, config-driven ROM workflows with strict validation.
+- Syncs retail ROM sets using the latest matching DAT (No-Intro or ReDump).
+- Builds curated hacks from `roms/Hacks/<system>/<hack-name>/` into ROMM-compatible output.
+- Imports BIOS files from configured source roots using catalog matching and optional hash verification.
+- Exports selected systems to an external destination (for example, SD card media).
 
 ## Quick Start
 
-1. Enter dev shell: `direnv allow` or run commands via `nix develop path:. -c ...`.
-2. Build: `nix develop path:. -c make build`.
-3. Inspect systems: `bin/retro-collection-tool systems`.
-4. Bootstrap directories (safe create-only):
-   `bin/retro-collection-tool bootstrap`
-5. Dry-run sync:
-   `bin/retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
+1. Enter the Nix environment:
+   - `direnv allow`, or
+   - `nix develop path:. --accept-flake-config`
+2. Build the binary:
+   - `nix develop path:. --accept-flake-config -c make build`
+3. Inspect enabled systems:
+   - `bin/retro-collection-tool systems`
+4. Create required folder layout safely (create-only):
+   - `bin/retro-collection-tool bootstrap`
+5. Preview a sync without writes:
+   - `bin/retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
-Set library root safely outside repo config using either:
+## Commands (At A Glance)
 
-- XDG user config (recommended): `$XDG_CONFIG_HOME/retro-collection-tool/config.yaml`
-- Environment variable override: `RETRO_COLLECTION_TOOL_ROOT=/mnt/media-emulation/RetroLibrary`
-
-## Commands
-
-- `sync --systems <csv> | --all-systems [--compress]`
+- `sync --systems <csv> | --all-systems [--compress] [--no-hacks]`
 - `hacks --systems <csv> | --all-systems [--no-move-retail]`
+- `bios --systems <csv> | --all-systems [--strict]`
 - `clean --systems <csv> | --all-systems [--include-bios]`
 - `export --systems <csv> | --all-systems --destination <path>`
 - `cache clean|path`
 - `bootstrap`
 - `systems`
-- `bios`
-- `redump` (stub command; ReDump is supported through `sync`)
-- `arcade` (stub)
+- `redump` (stub command)
+- `arcade` (stub command)
+
+See the full command reference in `docs/commands.md`.
 
 ## Configuration
 
-Default config: `config/retro-collection-tool.yaml`
+Default project config is `config/retro-collection-tool.yaml`.
 
-Config is merged by precedence (low to high):
+Config files are merged in this order (low to high precedence):
 
-1. XDG user config (`$XDG_CONFIG_HOME/retro-collection-tool/config.yaml` etc.)
-2. Project config (`./retro-collection-tool.yaml`, `./.retro-collection-tool.yaml`, or `./config/retro-collection-tool.yaml`)
-3. `RETRO_COLLECTION_TOOL_CONFIG` (optional explicit layer)
-4. `--config <path>` (optional explicit layer)
+1. XDG user config (`$XDG_CONFIG_HOME/retro-collection-tool/...`)
+2. Project config (`./retro-collection-tool.yaml`, `./.retro-collection-tool.yaml`, `./config/retro-collection-tool.yaml`)
+3. `RETRO_COLLECTION_TOOL_CONFIG`
+4. `--config <path>`
 
-Then `RETRO_COLLECTION_TOOL_ROOT` overrides `root`.
+After merge, `RETRO_COLLECTION_TOOL_ROOT` always overrides `root`.
 
-- `root` should come from your user XDG config or `RETRO_COLLECTION_TOOL_ROOT`.
-- `systems` maps platform slugs to DAT matching patterns and ROMM slugs.
-- `features` gates unfinished workflows.
-- Default enabled systems: `3do`, `3ds`, `dreamcast`, `gb`, `gba`, `gbc`, `gamecube`, `gamegear`, `genesis`, `jaguar`, `jaguar-cd`, `lynx`, `msx`, `msx2`, `n64`, `nds`, `neo-geo-cd`, `neo-geo-pocket`, `neo-geo-pocket-color`, `new-nintendo-3ds`, `nintendo-dsi`, `nes`, `ps2`, `ps3`, `psp`, `psx`, `saturn`, `sega32`, `sms`, `snes`, `supergrafx`, `tg16`, `turbografx-cd`, `wii`, `wiiu`, `xbox`, `xbox360`.
+Recommended practice:
 
-## Not Yet Implemented
+- Keep `root` out of repository-tracked config.
+- Set it in XDG user config or via `RETRO_COLLECTION_TOOL_ROOT`.
 
-- Arcade workflow command (`arcade`) remains feature-flagged and stubbed.
-- DOS and ScummVM workflows are not currently modeled as curated system workflows in this tool.
+If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool` (or `~/.cache/retro-collection-tool`).
 
-If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool`.
+## Safety And Behavior
 
-See `docs/configuration.md` for details.
+- `--dry-run` validates input and prints planned operations without writes.
+- Commands fail fast and return non-zero on errors.
+- CLI output is script-friendly for automation.
 
 ## Development
 
-- Host requirement is `nix` only.
-- `nix develop path:. -c make fmt`
-- `nix develop path:. -c make lint`
-- `nix develop path:. -c make test`
-- `nix develop path:. -c make hooks-install`
-- `nix develop path:. -c make pre-commit`
-- `nix develop path:. -c make docs-serve`
+Host dependency model is Nix-only.
 
-## Notes
+- `nix develop path:. --accept-flake-config -c make fmt`
+- `nix develop path:. --accept-flake-config -c make lint`
+- `nix develop path:. --accept-flake-config -c make test`
+- `nix develop path:. --accept-flake-config -c make build`
+- `nix develop path:. --accept-flake-config -c make docs-serve`
 
-- Tool is safe for automation and exits non-zero on failures.
-- `--dry-run` is a plan mode: validates config/input selection and prints Igir commands without executing writes.
-- Commands fail fast on unexpected trailing arguments.
-- Uses conventional commit style in this repository.
+## CI And Docs Publishing
 
-## CI
+GitHub Actions runs on push to `master` and performs:
 
-GitHub Actions runs on push/PR to `master` and executes:
+- format check (`make fmt` + clean diff)
+- lint (`make lint`)
+- tests (`make test`)
+- build (`make build`)
 
-- `make fmt` (with diff check)
-- `make lint`
-- `make test`
-- `make build`
-
-On pushes to `master` after a successful build, CI also runs:
-
-- `mkdocs gh-deploy --force`
-
-It uploads `bin/retro-collection-tool` as a build artifact. No release tagging/publishing is performed.
+If those pass, CI builds MkDocs and deploys to GitHub Pages using the official Pages workflow.

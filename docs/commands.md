@@ -1,8 +1,15 @@
 # Commands
 
+## Global Flags
+
+- `--config <path>`: add a highest-precedence config file layer.
+- `--dry-run`: validate and print planned actions without writing changes.
+
+Use `--dry-run` first when targeting real libraries.
+
 ## sync
 
-Runs the full default pipeline:
+Runs the default curation pipeline:
 
 1. Retail sync with Igir hardlinks.
 2. Hacks build with `rompatcherjs`.
@@ -10,14 +17,14 @@ Runs the full default pipeline:
 
 Use `--no-hacks` to run retail sync only.
 
-With global `--dry-run`, this command performs validation and prints the exact Igir command without executing it.
+With global `--dry-run`, this command validates selection/config and prints the exact Igir command without executing it.
 
 Example:
 `retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
 ## hacks
 
-Applies curated patches from `roms/Hacks/<system>/<hack-name>/`.
+Applies curated patches from `roms/Hacks/<system>/<hack-name>/` and writes ROMM-compatible outputs.
 
 Safety flag:
 `--no-move-retail` keeps retail ROM files in place and only writes hack outputs.
@@ -31,11 +38,16 @@ Hacks are now organized under the matched game directory when possible:
 
 Game matching uses the base ROM name and normalizes region groups (for example `(USA, Europe)`), so translations/hacks can align with retail game folders.
 
-Matching retail ROM files in the system root are moved into the matched `<game>/` folder. Source files from `roms/Hacks` are only used for patching inputs.
+Matching retail ROM files in the system root are moved into the matched `<game>/` folder. Source files from `roms/Hacks` are used only as patching inputs.
 
 ## clean
 
-Removes target output directories for selected systems.
+Removes generated output directories for selected systems.
+
+Flags:
+
+- `--systems <csv>` or `--all-systems`
+- `--include-bios` to include BIOS targets in clean operations
 
 Examples:
 `retro-collection-tool clean --systems genesis`
@@ -70,18 +82,27 @@ Examples:
 
 Copies selected systems to another destination (for SD cards).
 
+Required flag:
+
+- `--destination <path>`
+
 Example:
 `retro-collection-tool export --systems nes --destination /run/media/user/SDCARD/roms`
 
 ## cache
 
-- `cache path`
-- `cache clean`
+- `cache path`: print active cache path
+- `cache clean`: remove cache files
 
 ## bootstrap
 
-Creates required directory structure for configured systems.
+Creates expected directory structure for configured systems.
 
 ## systems
 
 Prints enabled systems.
+
+## Stub Commands
+
+- `redump` is currently a placeholder command.
+- `arcade` is currently a placeholder command and remains feature-gated.

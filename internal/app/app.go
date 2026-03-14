@@ -237,26 +237,40 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 	if err != nil {
 		return err
 	}
+	fmt.Printf("[sync] accepted: systems=%s compress=%t dry-run=%t no-hacks=%t\n", strings.Join(systems, ","), sf.compress, g.dryRun, sf.noHacks)
 
-	for _, system := range systems {
+	retailSpinner := newCommandSpinner("sync", "retail", "running retail sync with igir")
+	for i, system := range systems {
+		retailSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := syncRetailSystem(ctx, cfg, runner, g, system, sf.compress); err != nil {
+			retailSpinner.Stop(false, err.Error())
 			return err
 		}
 	}
+	retailSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
 
 	if !sf.noHacks {
-		for _, system := range systems {
+		hacksSpinner := newCommandSpinner("sync", "hacks", "building hacks overlays")
+		for i, system := range systems {
+			hacksSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 			if err := runHacksSystem(ctx, cfg, g, system, true); err != nil {
+				hacksSpinner.Stop(false, err.Error())
 				return err
 			}
 		}
+		hacksSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
 	}
 
-	for _, system := range systems {
+	organizeSpinner := newCommandSpinner("sync", "organize", "organizing retail layout")
+	for i, system := range systems {
+		organizeSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := organizeSystemLayout(cfg, g, system); err != nil {
+			organizeSpinner.Stop(false, err.Error())
 			return err
 		}
 	}
+	organizeSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
+	fmt.Printf("[sync] summary: systems=%d dry-run=%t\n", len(systems), g.dryRun)
 	return nil
 }
 
@@ -327,11 +341,11 @@ func syncRetailSystem(ctx context.Context, cfg *config.Config, runner *igir.Runn
 		args = append(args, "--zip")
 	}
 	if g.verbose {
-		fmt.Printf("[sync:%s] dat=%s output=%s\n", system, datPath, rommDir)
-		fmt.Printf("[sync:%s] retail source=%s input=%s\n", system, source, inputRoot)
+		fmt.Printf("[sync] [retail] system=%s dat=%s output=%s\n", system, datPath, rommDir)
+		fmt.Printf("[sync] [retail] system=%s source=%s input=%s\n", system, source, inputRoot)
 	}
 	if g.dryRun {
-		fmt.Printf("[dry-run] igir %s\n", strings.Join(args, " "))
+		fmt.Printf("[sync] [retail] dry-run system=%s igir %s\n", system, strings.Join(args, " "))
 		return nil
 	}
 	return runner.Run(ctx, args)
@@ -361,17 +375,28 @@ func runHacks(ctx context.Context, cfg *config.Config, g globalFlags, args []str
 	if err != nil {
 		return err
 	}
+	fmt.Printf("[hacks] accepted: systems=%s dry-run=%t no-move-retail=%t\n", strings.Join(systems, ","), g.dryRun, hf.noMoveRetail)
 
-	for _, system := range systems {
+	buildSpinner := newCommandSpinner("hacks", "build", "building curated hacks")
+	for i, system := range systems {
+		buildSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := runHacksSystem(ctx, cfg, g, system, !hf.noMoveRetail); err != nil {
+			buildSpinner.Stop(false, err.Error())
 			return err
 		}
 	}
-	for _, system := range systems {
+	buildSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
+
+	organizeSpinner := newCommandSpinner("hacks", "organize", "organizing retail layout")
+	for i, system := range systems {
+		organizeSpinner.Update(fmt.Sprintf("system=%s (%d/%d)", system, i+1, len(systems)))
 		if err := organizeSystemLayout(cfg, g, system); err != nil {
+			organizeSpinner.Stop(false, err.Error())
 			return err
 		}
 	}
+	organizeSpinner.Stop(true, fmt.Sprintf("systems=%d", len(systems)))
+	fmt.Printf("[hacks] summary: systems=%d dry-run=%t\n", len(systems), g.dryRun)
 	return nil
 }
 
@@ -380,7 +405,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 	systemHacksDir := filepath.Join(cfg.ResolvePath(cfg.Paths.HacksSource), system)
 	if _, statErr := os.Stat(systemHacksDir); os.IsNotExist(statErr) {
 		if g.verbose {
-			fmt.Printf("[hacks:%s] no hacks directory, skipping\n", system)
+			fmt.Printf("[hacks] [build] system=%s no hacks directory, skipping\n", system)
 		}
 		return nil
 	} else if statErr != nil {
@@ -428,7 +453,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		}
 		if len(patchFiles) == 0 {
 			if g.verbose {
-				fmt.Printf("[hacks:%s] no patch files in %s, skipping\n", system, hackName)
+				fmt.Printf("[hacks] [build] system=%s no patch files in %s, skipping\n", system, hackName)
 			}
 			continue
 		}
@@ -439,7 +464,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		}
 
 		if g.verbose {
-			fmt.Printf("[hacks:%s] processing %s with rompatcher (%d patches)\n", system, hackName, len(patchFiles))
+			fmt.Printf("[hacks] [build] system=%s processing=%s patches=%d\n", system, hackName, len(patchFiles))
 		}
 
 		gameDir, gameKey, err := resolveHackGameDir(baseOutput, inDir, hackName)
@@ -448,14 +473,14 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 		}
 
 		if g.dryRun {
-			fmt.Printf("[dry-run] target hack path %s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
+			fmt.Printf("[hacks] [build] dry-run target=%s\n", filepath.Join(gameDir, "hack", sanitizeName(hackName)))
 			logPatchPlan(baseROM, patchFiles)
 			if moveRetail {
 				if err := moveRetailFilesToGameDir(baseOutput, gameDir, gameKey, true, g.verbose); err != nil {
 					return err
 				}
 			} else {
-				fmt.Println("[dry-run] retail move disabled (--no-move-retail)")
+				fmt.Println("[hacks] [build] dry-run retail move disabled (--no-move-retail)")
 			}
 			continue
 		}
@@ -477,7 +502,7 @@ func runHacksSystem(ctx context.Context, cfg *config.Config, g globalFlags, syst
 				return err
 			}
 		} else if g.verbose {
-			fmt.Println("[hacks] retail move disabled (--no-move-retail)")
+			fmt.Println("[hacks] [build] retail move disabled (--no-move-retail)")
 		}
 	}
 	return nil
@@ -531,7 +556,7 @@ func collectPatchFiles(patchDir string) ([]string, error) {
 func logPatchPlan(baseROM string, patchFiles []string) {
 	current := filepath.Base(baseROM)
 	for i, patch := range patchFiles {
-		fmt.Printf("[dry-run] patch step %d: %s <= %s\n", i+1, current, filepath.Base(patch))
+		fmt.Printf("[hacks] [build] dry-run patch step=%d input=%s patch=%s\n", i+1, current, filepath.Base(patch))
 		current = fmt.Sprintf("%s (patched)", current)
 	}
 }
@@ -558,7 +583,7 @@ func runPatchSequence(ctx context.Context, workRoot, baseROM string, patchFiles 
 
 		cmdArgs := []string{"--yes", "rom-patcher", "patch", romForStep, patchForStep, "-s"}
 		if verbose {
-			fmt.Printf("[hacks] rompatcher step %d: npx %s\n", i+1, strings.Join(cmdArgs, " "))
+			fmt.Printf("[hacks] [build] rompatcher step=%d cmd=npx %s\n", i+1, strings.Join(cmdArgs, " "))
 		}
 		cmd := exec.CommandContext(ctx, "npx", cmdArgs...)
 		cmd.Dir = stepDir
@@ -730,7 +755,7 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 		srcFile := filepath.Join(root, name)
 
 		if dryRun {
-			fmt.Printf("[dry-run] organize retail %s -> %s\n", srcFile, targetFile)
+			fmt.Printf("[organize] [retail] dry-run move %s -> %s\n", srcFile, targetFile)
 			continue
 		}
 
@@ -739,7 +764,7 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 		}
 		if _, err := os.Stat(targetFile); err == nil {
 			if verbose {
-				fmt.Printf("[organize] skip existing retail file %s\n", targetFile)
+				fmt.Printf("[organize] [retail] skip existing %s\n", targetFile)
 			}
 			if err := os.Remove(srcFile); err != nil {
 				return fmt.Errorf("remove duplicate retail file %s: %w", srcFile, err)
@@ -750,7 +775,7 @@ func organizeRetailFilesInRoot(root string, dryRun, verbose bool) error {
 			return err
 		}
 		if verbose {
-			fmt.Printf("[organize] moved retail %s -> %s\n", srcFile, targetFile)
+			fmt.Printf("[organize] [retail] moved %s -> %s\n", srcFile, targetFile)
 		}
 	}
 	return nil
@@ -798,7 +823,7 @@ func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun,
 		dst := filepath.Join(gameDir, name)
 
 		if dryRun {
-			fmt.Printf("[dry-run] move retail %s -> %s\n", src, dst)
+			fmt.Printf("[hacks] [build] dry-run move retail %s -> %s\n", src, dst)
 			continue
 		}
 
@@ -809,7 +834,7 @@ func moveRetailFilesToGameDir(systemOutputRoot, gameDir, gameKey string, dryRun,
 			return err
 		}
 		if verbose {
-			fmt.Printf("[hacks] moved retail %s -> %s\n", src, dst)
+			fmt.Printf("[hacks] [build] moved retail %s -> %s\n", src, dst)
 		}
 	}
 

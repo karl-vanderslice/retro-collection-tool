@@ -344,7 +344,7 @@ func runSync(ctx context.Context, cfg *config.Config, runner *igir.Runner, g glo
 	var sf syncFlags
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.StringVar(&sf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.StringVar(&sf.systemsCSV, "systems", "", "comma-separated system slugs or aliases")
 	fs.BoolVar(&sf.allSystems, "all-systems", false, "run all enabled systems")
 	fs.BoolVar(&sf.compress, "compress", false, "enable zip output if configured")
 	fs.BoolVar(&sf.noHacks, "no-hacks", false, "sync retail only; skip hacks build")
@@ -486,7 +486,7 @@ func runHacks(ctx context.Context, cfg *config.Config, g globalFlags, args []str
 	var hf hacksFlags
 	fs := flag.NewFlagSet("hacks", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.StringVar(&hf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.StringVar(&hf.systemsCSV, "systems", "", "comma-separated system slugs or aliases")
 	fs.BoolVar(&hf.allSystems, "all-systems", false, "run all enabled systems")
 	fs.BoolVar(&hf.noMoveRetail, "no-move-retail", false, "do not move matching retail ROM files into game folders")
 	if err := fs.Parse(args); err != nil {
@@ -1093,7 +1093,7 @@ func runClean(cfg *config.Config, g globalFlags, args []string) error {
 	var cf cleanFlags
 	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.StringVar(&cf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.StringVar(&cf.systemsCSV, "systems", "", "comma-separated system slugs or aliases")
 	fs.BoolVar(&cf.allSystems, "all-systems", false, "clean all enabled systems")
 	fs.BoolVar(&cf.includeBios, "include-bios", false, "also remove BIOS target directories")
 	if err := fs.Parse(args); err != nil {
@@ -1135,7 +1135,7 @@ func runClean(cfg *config.Config, g globalFlags, args []string) error {
 func runExport(cfg *config.Config, g globalFlags, args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	systemsCSV := fs.String("systems", "", "comma-separated system slugs")
+	systemsCSV := fs.String("systems", "", "comma-separated system slugs or aliases")
 	allSystems := fs.Bool("all-systems", false, "export all enabled systems")
 	destination := fs.String("destination", "", "destination root path (e.g., mounted SD card)")
 	if err := fs.Parse(args); err != nil {
@@ -1278,7 +1278,7 @@ func printCommandUsage(command string) error {
 	switch strings.ToLower(strings.TrimSpace(command)) {
 	case "sync":
 		fmt.Println(`Usage:
-	retro-collection-tool [global flags] sync --systems <slug[,slug...]> [--compress] [--no-hacks]
+	retro-collection-tool [global flags] sync --systems <slug-or-alias[,slug-or-alias...]> [--compress] [--no-hacks]
 	retro-collection-tool [global flags] sync --all-systems [--compress] [--no-hacks]
 
 Examples:
@@ -1286,7 +1286,7 @@ Examples:
 	retro-collection-tool --dry-run sync --all-systems --compress`)
 	case "hacks":
 		fmt.Println(`Usage:
-	retro-collection-tool [global flags] hacks --systems <slug[,slug...]>
+	retro-collection-tool [global flags] hacks --systems <slug-or-alias[,slug-or-alias...]>
 	retro-collection-tool [global flags] hacks --all-systems [--no-move-retail]
 
 Examples:
@@ -1294,7 +1294,7 @@ Examples:
 	retro-collection-tool --dry-run hacks --all-systems --no-move-retail`)
 	case "bios":
 		fmt.Println(`Usage:
-	retro-collection-tool [global flags] bios --systems <slug[,slug...]> [--strict]
+	retro-collection-tool [global flags] bios --systems <slug-or-alias[,slug-or-alias...]> [--strict]
 	retro-collection-tool [global flags] bios --all-systems [--strict]
 
 Examples:
@@ -1302,7 +1302,7 @@ Examples:
 	retro-collection-tool --dry-run bios --all-systems --strict`)
 	case "clean":
 		fmt.Println(`Usage:
-	retro-collection-tool [global flags] clean --systems <slug[,slug...]> [--include-bios]
+	retro-collection-tool [global flags] clean --systems <slug-or-alias[,slug-or-alias...]> [--include-bios]
 	retro-collection-tool [global flags] clean --all-systems [--include-bios]
 
 Examples:
@@ -1310,7 +1310,7 @@ Examples:
 	retro-collection-tool --dry-run clean --all-systems --include-bios`)
 	case "export":
 		fmt.Println(`Usage:
-	retro-collection-tool [global flags] export --destination <path> --systems <slug[,slug...]>
+	retro-collection-tool [global flags] export --destination <path> --systems <slug-or-alias[,slug-or-alias...]>
 	retro-collection-tool [global flags] export --destination <path> --all-systems
 
 Examples:

@@ -111,7 +111,7 @@ func runBios(cfg *config.Config, g globalFlags, args []string) error {
 	var bf biosFlags
 	fs := flag.NewFlagSet("bios", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.StringVar(&bf.systemsCSV, "systems", "", "comma-separated system slugs")
+	fs.StringVar(&bf.systemsCSV, "systems", "", "comma-separated system slugs or aliases")
 	fs.BoolVar(&bf.allSystems, "all-systems", false, "run all enabled systems")
 	fs.BoolVar(&bf.strict, "strict", false, "fail when required BIOS entries are missing")
 	if err := fs.Parse(args); err != nil {

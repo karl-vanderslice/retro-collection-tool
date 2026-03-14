@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
 )
@@ -21,19 +22,69 @@ func ExpandSystems(requested []string, all bool, cfg *config.Config) ([]string, 
 	for _, raw := range requested {
 		for _, p := range strings.Split(raw, ",") {
 			s := strings.TrimSpace(strings.ToLower(p))
-			if s == "" || seen[s] {
+			if s == "" {
 				continue
 			}
-			if _, ok := cfg.Systems[s]; !ok {
+
+			resolved, ok := resolveSystemToken(s, cfg)
+			if !ok {
 				return nil, fmt.Errorf("unsupported system: %s", s)
 			}
-			if !cfg.Systems[s].Enabled {
-				return nil, fmt.Errorf("system disabled in config: %s", s)
+
+			if seen[resolved] {
+				continue
 			}
-			seen[s] = true
-			normalized = append(normalized, s)
+			if !cfg.Systems[resolved].Enabled {
+				return nil, fmt.Errorf("system disabled in config: %s", resolved)
+			}
+			seen[resolved] = true
+			normalized = append(normalized, resolved)
 		}
 	}
 	sort.Strings(normalized)
 	return normalized, nil
+}
+
+var explicitSystemAliases = map[string]string{
+	"ngp":  "neo-geo-pocket",
+	"ngpc": "neo-geo-pocket-color",
+}
+
+func resolveSystemToken(token string, cfg *config.Config) (string, bool) {
+	if _, ok := cfg.Systems[token]; ok {
+		return token, true
+	}
+
+	if alias, ok := explicitSystemAliases[token]; ok {
+		if _, exists := cfg.Systems[alias]; exists {
+			return alias, true
+		}
+	}
+
+	normalized := normalizeSystemToken(token)
+	if normalized == "" {
+		return "", false
+	}
+
+	for key := range cfg.Systems {
+		if normalizeSystemToken(key) == normalized {
+			return key, true
+		}
+	}
+
+	return "", false
+}
+
+func normalizeSystemToken(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range v {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

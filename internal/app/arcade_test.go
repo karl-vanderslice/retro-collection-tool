@@ -11,7 +11,7 @@ import (
 	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
 )
 
-func TestSelectArcadeEntriesFiltersAndKeepsBios(t *testing.T) {
+func TestSelectArcadeEntriesFiltersAndDropsBios(t *testing.T) {
 	t.Parallel()
 
 	entries := []arcadeDATEntry{
@@ -25,12 +25,14 @@ func TestSelectArcadeEntriesFiltersAndKeepsBios(t *testing.T) {
 	if len(sel.Games) != 1 || sel.Games[0] != "sf2" {
 		t.Fatalf("unexpected game selection: %#v", sel.Games)
 	}
-	if len(sel.Bios) != 1 || sel.Bios[0] != "neogeo" {
-		t.Fatalf("unexpected bios selection: %#v", sel.Bios)
+	for _, game := range sel.Games {
+		if game == "neogeo" {
+			t.Fatalf("expected bios entries to be ignored")
+		}
 	}
 }
 
-func TestVerifyArcadeVaultSetReportsGamesAndBios(t *testing.T) {
+func TestVerifyArcadeVaultSetReportsGamesOnly(t *testing.T) {
 	t.Parallel()
 
 	tmp := t.TempDir()
@@ -59,12 +61,9 @@ func TestVerifyArcadeVaultSetReportsGamesAndBios(t *testing.T) {
 	if report.TotalGames != 1 || report.PresentGames != 1 || report.MissingGames != 0 {
 		t.Fatalf("unexpected game report: %#v", report)
 	}
-	if report.TotalBios != 1 || report.PresentBios != 0 || report.MissingBios != 1 {
-		t.Fatalf("unexpected bios report: %#v", report)
-	}
 }
 
-func TestRunArcadeSyncLinksGamesAndBios(t *testing.T) {
+func TestRunArcadeSyncLinksGamesOnly(t *testing.T) {
 	t.Parallel()
 
 	tmp := t.TempDir()
@@ -93,11 +92,9 @@ func TestRunArcadeSyncLinksGamesAndBios(t *testing.T) {
 	}
 
 	mameGame := filepath.Join(specs[0].VaultDir, "sf2.zip")
-	mameBios := filepath.Join(specs[0].VaultDir, "neogeo.zip")
 	fbGame := filepath.Join(specs[1].VaultDir, "kof98.zip")
-	fbBios := filepath.Join(specs[1].VaultDir, "neogeo.zip")
 
-	for _, p := range []string{mameGame, mameBios, fbGame, fbBios} {
+	for _, p := range []string{mameGame, fbGame} {
 		if err := os.WriteFile(p, []byte("rom"), 0o644); err != nil {
 			t.Fatalf("write vault file %s: %v", p, err)
 		}
@@ -108,12 +105,13 @@ func TestRunArcadeSyncLinksGamesAndBios(t *testing.T) {
 	}
 
 	assertHardLinked(t, mameGame, filepath.Join(specs[0].LibraryDir, "sf2.zip"))
-	assertHardLinked(t, mameBios, filepath.Join(specs[0].LibraryDir, "neogeo.zip"))
 	assertHardLinked(t, fbGame, filepath.Join(specs[1].LibraryDir, "kof98.zip"))
-	assertHardLinked(t, fbBios, filepath.Join(specs[1].LibraryDir, "neogeo.zip"))
 
 	if _, err := os.Stat(filepath.Join(specs[0].LibraryDir, "sf2j.zip")); !os.IsNotExist(err) {
 		t.Fatalf("expected clone not to be linked")
+	}
+	if _, err := os.Stat(filepath.Join(specs[0].LibraryDir, "neogeo.zip")); !os.IsNotExist(err) {
+		t.Fatalf("expected bios not to be linked")
 	}
 }
 

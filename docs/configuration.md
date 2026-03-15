@@ -93,7 +93,7 @@ Arcade workflow configuration is defined under `arcade`:
 - `dat_fbneo_file`: cached DAT filename under `<cache>/arcade/dats`.
 - `exclude_keywords`: case-insensitive keyword filters applied to DAT game entries (name+description).
 
-Arcade verification and sync always process BIOS separately from game entries, so BIOS coverage is reported and linked independently.
+Arcade verification and sync are currently game-only and ignore DAT-marked BIOS entries.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
 

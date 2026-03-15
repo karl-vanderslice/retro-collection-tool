@@ -44,5 +44,5 @@ Status: TODO (draft scaffold only)
 
 ## Notes
 
-- Current implementation links both filtered game archives and DAT-marked BIOS archives.
+- Current implementation links filtered game archives only and ignores DAT-marked BIOS archives.
 - If both sets target one output folder, later-linked files with the same archive name replace earlier ones.

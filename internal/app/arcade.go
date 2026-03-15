@@ -25,7 +25,6 @@ type arcadeDATEntry struct {
 
 type arcadeSetSelection struct {
 	Games []string
-	Bios  []string
 }
 
 type arcadeSetReport struct {
@@ -35,11 +34,7 @@ type arcadeSetReport struct {
 	TotalGames     int
 	PresentGames   int
 	MissingGames   int
-	TotalBios      int
-	PresentBios    int
-	MissingBios    int
 	LinkedGames    int
-	LinkedBios     int
 	MissingSamples []string
 }
 
@@ -142,7 +137,6 @@ func runArcadeDATVerify(cfg *config.Config, g globalFlags) error {
 			"path":         spec.DatPath,
 			"entries":      len(entries),
 			"games":        len(sel.Games),
-			"bios":         len(sel.Bios),
 			"exclude_keys": strings.Join(cfg.ArcadeExcludeKeywords(), ","),
 		})
 	}
@@ -153,8 +147,6 @@ func runArcadeVerify(cfg *config.Config, g globalFlags) error {
 	specs := arcadeSpecsFromConfig(cfg)
 	totalGames := 0
 	presentGames := 0
-	totalBios := 0
-	presentBios := 0
 	for _, spec := range specs {
 		report, err := verifyArcadeVaultSet(spec, cfg)
 		if err != nil {
@@ -162,17 +154,12 @@ func runArcadeVerify(cfg *config.Config, g globalFlags) error {
 		}
 		totalGames += report.TotalGames
 		presentGames += report.PresentGames
-		totalBios += report.TotalBios
-		presentBios += report.PresentBios
 		emitInfo(g, "arcade", "verify", "set report", outputFields{
 			"set":            report.SetName,
 			"vault":          report.VaultDir,
 			"total_games":    report.TotalGames,
 			"present_games":  report.PresentGames,
 			"missing_games":  report.MissingGames,
-			"total_bios":     report.TotalBios,
-			"present_bios":   report.PresentBios,
-			"missing_bios":   report.MissingBios,
 			"missing_sample": strings.Join(report.MissingSamples, ","),
 		})
 	}
@@ -181,9 +168,6 @@ func runArcadeVerify(cfg *config.Config, g globalFlags) error {
 		"total_games":   totalGames,
 		"present_games": presentGames,
 		"missing_games": totalGames - presentGames,
-		"total_bios":    totalBios,
-		"present_bios":  presentBios,
-		"missing_bios":  totalBios - presentBios,
 	})
 	return nil
 }
@@ -200,9 +184,7 @@ func runArcadeSync(cfg *config.Config, g globalFlags) error {
 			"vault":          report.VaultDir,
 			"library":        report.LibraryDir,
 			"linked_games":   report.LinkedGames,
-			"linked_bios":    report.LinkedBios,
 			"missing_games":  report.MissingGames,
-			"missing_bios":   report.MissingBios,
 			"missing_sample": strings.Join(report.MissingSamples, ","),
 			"dry_run":        g.dryRun,
 		})
@@ -239,23 +221,12 @@ func verifyArcadeVaultSet(spec arcadeSetSpec, cfg *config.Config) (arcadeSetRepo
 		VaultDir:   spec.VaultDir,
 		LibraryDir: spec.LibraryDir,
 		TotalGames: len(sel.Games),
-		TotalBios:  len(sel.Bios),
 	}
 	for _, name := range sel.Games {
 		if _, ok := findArcadeArchive(spec.VaultDir, name); ok {
 			report.PresentGames++
 		} else {
 			report.MissingGames++
-			if len(report.MissingSamples) < 12 {
-				report.MissingSamples = append(report.MissingSamples, name)
-			}
-		}
-	}
-	for _, name := range sel.Bios {
-		if _, ok := findArcadeArchive(spec.VaultDir, name); ok {
-			report.PresentBios++
-		} else {
-			report.MissingBios++
 			if len(report.MissingSamples) < 12 {
 				report.MissingSamples = append(report.MissingSamples, name)
 			}
@@ -278,39 +249,26 @@ func linkArcadeSet(spec arcadeSetSpec, cfg *config.Config, g globalFlags) (arcad
 		return arcadeSetReport{}, fmt.Errorf("load %s dat %s: %w", spec.SetName, spec.DatPath, err)
 	}
 	sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
-	linkOne := func(name string, bios bool) error {
+	linkOne := func(name string) error {
 		src, ok := findArcadeArchive(spec.VaultDir, name)
 		if !ok {
 			return nil
 		}
 		dst := filepath.Join(spec.LibraryDir, filepath.Base(src))
 		if g.dryRun {
-			emitInfo(g, "arcade", "sync", "dry-run link", outputFields{"set": spec.SetName, "from": src, "to": dst, "bios": bios})
-			if bios {
-				report.LinkedBios++
-			} else {
-				report.LinkedGames++
-			}
+			emitInfo(g, "arcade", "sync", "dry-run link", outputFields{"set": spec.SetName, "from": src, "to": dst})
+			report.LinkedGames++
 			return nil
 		}
 		if err := fsutil.LinkOrCopy(src, dst); err != nil {
 			return err
 		}
-		if bios {
-			report.LinkedBios++
-		} else {
-			report.LinkedGames++
-		}
+		report.LinkedGames++
 		return nil
 	}
 
 	for _, name := range sel.Games {
-		if err := linkOne(name, false); err != nil {
-			return arcadeSetReport{}, err
-		}
-	}
-	for _, name := range sel.Bios {
-		if err := linkOne(name, true); err != nil {
+		if err := linkOne(name); err != nil {
 			return arcadeSetReport{}, err
 		}
 	}
@@ -319,13 +277,11 @@ func linkArcadeSet(spec arcadeSetSpec, cfg *config.Config, g globalFlags) (arcad
 
 func selectArcadeEntries(entries []arcadeDATEntry, excludeKeywords []string) arcadeSetSelection {
 	games := map[string]bool{}
-	bios := map[string]bool{}
 	for _, e := range entries {
 		if strings.TrimSpace(e.Name) == "" {
 			continue
 		}
 		if e.IsBios {
-			bios[e.Name] = true
 			continue
 		}
 		if strings.TrimSpace(e.CloneOf) != "" {
@@ -355,13 +311,7 @@ func selectArcadeEntries(entries []arcadeDATEntry, excludeKeywords []string) arc
 	}
 	sort.Strings(gameNames)
 
-	biosNames := make([]string, 0, len(bios))
-	for name := range bios {
-		biosNames = append(biosNames, name)
-	}
-	sort.Strings(biosNames)
-
-	return arcadeSetSelection{Games: gameNames, Bios: biosNames}
+	return arcadeSetSelection{Games: gameNames}
 }
 
 func parseArcadeDAT(path string) ([]arcadeDATEntry, error) {

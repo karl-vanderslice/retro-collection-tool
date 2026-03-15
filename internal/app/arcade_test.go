@@ -216,3 +216,39 @@ func TestRunArcadeDatsVerifyRequiresExistingDats(t *testing.T) {
 		t.Fatalf("expected update guidance in error: %v", err)
 	}
 }
+
+func TestParseArcadeDATSupportsClrMameProFormat(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	datPath := filepath.Join(tmp, "mame-2003-plus.dat")
+	content := strings.Join([]string{
+		`clrmamepro (`,
+		`  name "MAME 2003-Plus - Working Romsets"`,
+		`)`,
+		``,
+		`game (`,
+		`  name "1941 - Counter Attack (World)"`,
+		`  rom ( name 1941.zip size 1419125 crc 9389CD2E )`,
+		`)`,
+		``,
+		`game (`,
+		`  name "1942"`,
+		`  rom ( name "1942.zip" size 123 crc deadbeef )`,
+		`)`,
+	}, "\n")
+	if err := os.WriteFile(datPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write dat: %v", err)
+	}
+
+	entries, err := parseArcadeDAT(datPath)
+	if err != nil {
+		t.Fatalf("parseArcadeDAT: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].Name != "1941" || entries[1].Name != "1942" {
+		t.Fatalf("unexpected parsed names: %#v", entries)
+	}
+}

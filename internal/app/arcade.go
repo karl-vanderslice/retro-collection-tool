@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -323,11 +325,21 @@ func selectArcadeEntries(entries []arcadeDATEntry, excludeKeywords []string) arc
 }
 
 func parseArcadeDAT(path string) ([]arcadeDATEntry, error) {
-	f, err := os.Open(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("dat file missing: %s (run: retro-collection-tool arcade dats update)", path)
 		}
+		return nil, err
+	}
+
+	trimmed := strings.TrimSpace(string(b))
+	if strings.HasPrefix(trimmed, "clrmamepro") {
+		return parseClrMameProDAT(string(b)), nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -369,6 +381,36 @@ func parseArcadeDAT(path string) ([]arcadeDATEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+var clrMameProRomNameRe = regexp.MustCompile(`(?i)rom\s*\(\s*name\s+"?([^"\s\)]+)"?`)
+
+func parseClrMameProDAT(content string) []arcadeDATEntry {
+	seen := map[string]bool{}
+	entries := make([]arcadeDATEntry, 0, 2048)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		m := clrMameProRomNameRe.FindStringSubmatch(line)
+		if len(m) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(m[1])
+		name = strings.TrimSuffix(name, filepath.Ext(name))
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		entries = append(entries, arcadeDATEntry{Name: name})
+	}
+	return entries
 }
 
 func buildArcadeArchiveIndex(root string) (map[string]string, error) {

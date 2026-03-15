@@ -16,6 +16,7 @@ type Config struct {
 	CacheDir  string                   `yaml:"cache_dir"`
 	Igir      IgirConfig               `yaml:"igir"`
 	Bios      BiosConfig               `yaml:"bios"`
+	Arcade    ArcadeConfig             `yaml:"arcade"`
 	Paths     PathsConfig              `yaml:"paths"`
 	Systems   map[string]SystemConfig  `yaml:"systems"`
 	Features  FeatureToggles           `yaml:"features"`
@@ -71,6 +72,18 @@ type FeatureToggles struct {
 type BiosConfig struct {
 	CatalogFile string   `yaml:"catalog_file"`
 	SourceRoots []string `yaml:"source_roots"`
+}
+
+type ArcadeConfig struct {
+	VaultMAME2003Plus string   `yaml:"vault_mame_2003_plus"`
+	VaultFBNeo        string   `yaml:"vault_fbneo"`
+	LibraryMAME2003   string   `yaml:"library_mame_2003_plus"`
+	LibraryFBNeo      string   `yaml:"library_fbneo"`
+	DatMAME2003URL    string   `yaml:"dat_mame_2003_plus_url"`
+	DatFBNeoURL       string   `yaml:"dat_fbneo_url"`
+	DatMAME2003File   string   `yaml:"dat_mame_2003_plus_file"`
+	DatFBNeoFile      string   `yaml:"dat_fbneo_file"`
+	ExcludeKeywords   []string `yaml:"exclude_keywords"`
 }
 
 type BootstrapDirectoryLayout struct {
@@ -223,4 +236,73 @@ func (c *Config) EnabledSystems() []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func (c *Config) ArcadeVaultMAME2003Plus() string {
+	if v := strings.TrimSpace(c.Arcade.VaultMAME2003Plus); v != "" {
+		return c.ResolvePath(v)
+	}
+	if v := strings.TrimSpace(c.Paths.MediaRoot); v != "" {
+		return filepath.Join(c.ResolvePath(v), "roms", "Vault", "Arcade", "mame-2003-plus-reference-set", "roms")
+	}
+	return c.ResolvePath("roms/Vault/Arcade/mame-2003-plus-reference-set/roms")
+}
+
+func (c *Config) ArcadeVaultFBNeo() string {
+	if v := strings.TrimSpace(c.Arcade.VaultFBNeo); v != "" {
+		return c.ResolvePath(v)
+	}
+	if v := strings.TrimSpace(c.Paths.MediaRoot); v != "" {
+		return filepath.Join(c.ResolvePath(v), "roms", "Vault", "Arcade", "fbneo_1003_bestset", "fbneo_1_0_0_3_best", "games")
+	}
+	return c.ResolvePath("roms/Vault/Arcade/fbneo_1003_bestset/fbneo_1_0_0_3_best/games")
+}
+
+func (c *Config) ArcadeLibraryMAME2003Plus() string {
+	if v := strings.TrimSpace(c.Arcade.LibraryMAME2003); v != "" {
+		return c.ResolvePath(v)
+	}
+	return filepath.Join(c.ResolvePath(c.Paths.RommLibraryRoms), "arcade", "mame-2003-plus")
+}
+
+func (c *Config) ArcadeLibraryFBNeo() string {
+	if v := strings.TrimSpace(c.Arcade.LibraryFBNeo); v != "" {
+		return c.ResolvePath(v)
+	}
+	return filepath.Join(c.ResolvePath(c.Paths.RommLibraryRoms), "arcade", "fbneo")
+}
+
+func (c *Config) ArcadeDatMAME2003PlusURL() string {
+	if v := strings.TrimSpace(c.Arcade.DatMAME2003URL); v != "" {
+		return v
+	}
+	return "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/mame-nonmerged/MAME%202003-Plus.dat"
+}
+
+func (c *Config) ArcadeDatFBNeoURL() string {
+	if v := strings.TrimSpace(c.Arcade.DatFBNeoURL); v != "" {
+		return v
+	}
+	return "https://git.libretro.com/libretro/FBNeo/-/raw/master/dats/FinalBurn%20Neo%20%28ClrMame%20Pro%20XML%2C%20Arcade%20only%29.dat"
+}
+
+func (c *Config) ArcadeDatMAME2003PlusFile() string {
+	if v := strings.TrimSpace(c.Arcade.DatMAME2003File); v != "" {
+		return v
+	}
+	return "arcade-mame-2003-plus.dat"
+}
+
+func (c *Config) ArcadeDatFBNeoFile() string {
+	if v := strings.TrimSpace(c.Arcade.DatFBNeoFile); v != "" {
+		return v
+	}
+	return "arcade-fbneo.dat"
+}
+
+func (c *Config) ArcadeExcludeKeywords() []string {
+	if len(c.Arcade.ExcludeKeywords) > 0 {
+		return c.Arcade.ExcludeKeywords
+	}
+	return []string{"mahjong", "medal", "gambl", "adult", "hentai", "electromechanical"}
 }

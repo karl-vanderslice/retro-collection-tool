@@ -77,7 +77,23 @@ If `retail_dat_pattern` is omitted, `dat_pattern` is used for retail sync.
 
 Hacks do not require DAT files. The hacks workflow uses `rompatcherjs` and applies all discovered patch files in sorted filename order.
 
-Arcade remains feature-gated. ReDump is supported through per-system `retail_dat_source: redump`.
+Arcade is feature-gated behind `features.enable_arcade`.
+
+## Arcade
+
+Arcade workflow configuration is defined under `arcade`:
+
+- `vault_mame_2003_plus`: source folder for MAME 2003 Plus archives.
+- `vault_fbneo`: source folder for FBNeo archives.
+- `library_mame_2003_plus`: output folder for curated MAME 2003 Plus links.
+- `library_fbneo`: output folder for curated FBNeo links.
+- `dat_mame_2003_plus_url`: URL used by `arcade dats update`.
+- `dat_fbneo_url`: URL used by `arcade dats update`.
+- `dat_mame_2003_plus_file`: cached DAT filename under `<cache>/arcade/dats`.
+- `dat_fbneo_file`: cached DAT filename under `<cache>/arcade/dats`.
+- `exclude_keywords`: case-insensitive keyword filters applied to DAT game entries (name+description).
+
+Arcade verification and sync always process BIOS separately from game entries, so BIOS coverage is reported and linked independently.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
 

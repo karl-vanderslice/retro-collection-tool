@@ -16,6 +16,17 @@ bios:
   source_roots:
     - bios
 
+arcade:
+  vault_mame_2003_plus: /mnt/media-emulation/RetroLibrary/roms/Vault/Arcade/mame-2003-plus-reference-set/roms
+  vault_fbneo: /mnt/media-emulation/RetroLibrary/roms/Vault/Arcade/fbneo_1003_bestset/fbneo_1_0_0_3_best/games
+  library_mame_2003_plus: roms/Library/roms/arcade/mame-2003-plus
+  library_fbneo: roms/Library/roms/arcade/fbneo
+  dat_mame_2003_plus_url: https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/mame-nonmerged/MAME%202003-Plus.dat
+  dat_fbneo_url: https://git.libretro.com/libretro/FBNeo/-/raw/master/dats/FinalBurn%20Neo%20%28ClrMame%20Pro%20XML%2C%20Arcade%20only%29.dat
+  dat_mame_2003_plus_file: arcade-mame-2003-plus.dat
+  dat_fbneo_file: arcade-fbneo.dat
+  exclude_keywords: ["mahjong", "medal", "gambl", "adult", "hentai", "electromechanical"]
+
 paths:
   vault_no_intro: roms/Vault/NoIntro/NoIntro
   vault_bios: roms/Vault/BIOS
@@ -32,7 +43,7 @@ paths:
 features:
   enable_bios: true
   enable_redump: true
-  enable_arcade: false
+  enable_arcade: true
 
 systems:
   3do:

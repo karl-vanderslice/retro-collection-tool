@@ -61,6 +61,18 @@ func errorHints(msg string) []string {
 		hints = append(hints,
 			"Valid cache subcommands are: clean, path.",
 		)
+	case strings.Contains(lower, "arcade requires subcommand"):
+		hints = append(hints,
+			"Use one of: 'retro-collection-tool arcade dats update', 'retro-collection-tool arcade verify', or 'retro-collection-tool arcade sync'.",
+		)
+	case strings.Contains(lower, "arcade dats requires subcommand"):
+		hints = append(hints,
+			"Use one of: 'retro-collection-tool arcade dats update' or 'retro-collection-tool arcade dats verify'.",
+		)
+	case strings.Contains(lower, "unknown arcade subcommand") || strings.Contains(lower, "unknown arcade dats subcommand"):
+		hints = append(hints,
+			"Run 'retro-collection-tool help arcade' for supported arcade workflows.",
+		)
 	case strings.Contains(lower, "unexpected arguments"):
 		hints = append(hints,
 			"Run 'retro-collection-tool help <command>' to verify supported flags.",

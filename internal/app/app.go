@@ -114,7 +114,7 @@ func Run(args []string) error {
 	case "redump":
 		return runRedumpStub(cfg)
 	case "arcade":
-		return runArcadeStub(cfg)
+		return runArcade(cfg, globals, rest[1:])
 	case "cache":
 		return runCache(cfg, globals, rest[1:])
 	case "clean":
@@ -1046,13 +1046,6 @@ func runRedumpStub(cfg *config.Config) error {
 	return errors.New("redump workflow is stubbed; implementation planned in next phase")
 }
 
-func runArcadeStub(cfg *config.Config) error {
-	if !cfg.Features.EnableArcade {
-		return errors.New("arcade workflow disabled in config.features.enable_arcade")
-	}
-	return errors.New("arcade workflow is stubbed; implementation planned in next phase")
-}
-
 func runCache(cfg *config.Config, g globalFlags, args []string) error {
 	if len(args) == 0 {
 		return errors.New("cache requires subcommand: clean|path")
@@ -1258,8 +1251,8 @@ Commands:
   hacks       Run curated ROM hacks patch workflow
 	clean       Remove target output directories for selected systems
 	bios        BIOS import workflow with strict hash matching
-  redump      ReDump workflow (stub)
-  arcade      Arcade workflow (stub)
+	redump      ReDump workflow (stub)
+  arcade      Arcade workflows: dats update|verify, verify, sync
   export      Copy selected ROMM systems to destination (e.g., SD card)
   cache       Cache controls: clean|path
   bootstrap   Create expected directory structure
@@ -1270,6 +1263,8 @@ Examples:
 	retro-collection-tool sync --systems snes,genesis
 	retro-collection-tool hacks --all-systems
 	retro-collection-tool bios --systems gba --strict
+	retro-collection-tool arcade dats update
+	retro-collection-tool arcade verify
 	retro-collection-tool cache path
 	retro-collection-tool help export`) //nolint:lll
 }
@@ -1339,8 +1334,19 @@ Example:
 	case "version":
 		fmt.Println(`Usage:
 	retro-collection-tool [global flags] version`)
-	case "redump", "arcade":
+	case "redump":
 		fmt.Printf("%s is currently stubbed behind a feature flag in config.\n", command)
+	case "arcade":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] arcade dats update
+	retro-collection-tool [global flags] arcade dats verify
+	retro-collection-tool [global flags] arcade verify
+	retro-collection-tool [global flags] arcade sync
+
+Examples:
+	retro-collection-tool arcade dats update
+	retro-collection-tool arcade dats verify
+	retro-collection-tool --dry-run arcade sync`)
 	case "help", "", "-h", "--help":
 		printRootUsage()
 	default:

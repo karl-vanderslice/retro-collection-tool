@@ -40,7 +40,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 - `bootstrap`
 - `systems`
 - `redump` (stub command)
-- `arcade` (stub command)
+- `arcade dats update|verify | verify | sync`
 
 See the full command reference in `docs/commands.md`.
 

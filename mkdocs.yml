@@ -40,5 +40,6 @@ nav:
   - Home: index.md
   - Configuration: configuration.md
   - Commands: commands.md
+  - RomVault Arcade Workflow: workflow-romvault-arcade.md
   - Architecture: architecture.md
   - TODO: todo.md

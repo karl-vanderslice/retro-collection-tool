@@ -13,6 +13,9 @@
 - Expand system catalog to all ROMM-supported platforms.
 - Add platform-specific patching and multi-disc handling policies.
 - Add optional post-sync dedupe and reporting summaries.
+- Add frontend export/config generators for ES-DE and other launchers (TODO).
+- Add per-frontend arcade core preference templates (FBNeo first, MAME 2003 fallback) (TODO).
+- Add docs for generating frontend-specific launch config from curated arcade outputs (TODO).
 
 ## Long Term
 

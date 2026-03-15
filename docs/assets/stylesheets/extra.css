@@ -1,0 +1,30 @@
+:root {
+	--retro-accent: #68d391;
+	--retro-accent-strong: #2f855a;
+}
+
+.md-header__title {
+	letter-spacing: 0.02em;
+	font-weight: 700;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+	letter-spacing: 0.015em;
+}
+
+.md-typeset a {
+	text-decoration-thickness: 0.12em;
+	text-underline-offset: 0.14em;
+}
+
+.md-nav__link--active,
+.md-typeset a:hover {
+	color: var(--retro-accent-strong);
+}
+
+[data-md-color-scheme="slate"] {
+	--retro-accent: #76e4a8;
+	--retro-accent-strong: #4bc888;
+}

@@ -1,44 +1,19 @@
 package app
 
 import (
-	"bufio"
-	"encoding/xml"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
 	"github.com/karl-vanderslice/retro-collection-tool/internal/fsutil"
 )
-
-type arcadeDATEntry struct {
-	Name        string
-	Description string
-	CloneOf     string
-	IsBios      bool
-}
-
-type arcadeSetSelection struct {
-	Games []string
-}
-
-type arcadeSetReport struct {
-	SetName        string
-	VaultDir       string
-	LibraryDir     string
-	TotalGames     int
-	PresentGames   int
-	MissingGames   int
-	LinkedGames    int
-	MissingSamples []string
-}
 
 type arcadeSetSpec struct {
 	SetName    string
@@ -47,7 +22,11 @@ type arcadeSetSpec struct {
 	LibraryDir string
 }
 
-func runArcade(cfg *config.Config, g globalFlags, args []string) error {
+type arcadeIgirRunner interface {
+	Run(ctx context.Context, args []string) error
+}
+
+func runArcade(ctx context.Context, cfg *config.Config, runner arcadeIgirRunner, g globalFlags, args []string) error {
 	if !cfg.Features.EnableArcade {
 		return errors.New("arcade workflow disabled in config.features.enable_arcade")
 	}
@@ -77,12 +56,12 @@ func runArcade(cfg *config.Config, g globalFlags, args []string) error {
 		if err := ensureNoPositionalArgs("arcade verify", args[1:]); err != nil {
 			return err
 		}
-		return runArcadeVerify(cfg, g)
+		return runArcadeVerify(ctx, cfg, runner, g)
 	case "sync":
 		if err := ensureNoPositionalArgs("arcade sync", args[1:]); err != nil {
 			return err
 		}
-		return runArcadeSync(cfg, g)
+		return runArcadeSync(ctx, cfg, runner, g)
 	default:
 		return fmt.Errorf("unknown arcade subcommand: %s", args[0])
 	}
@@ -129,69 +108,101 @@ func runArcadeDATUpdate(cfg *config.Config, g globalFlags) error {
 func runArcadeDATVerify(cfg *config.Config, g globalFlags) error {
 	specs := arcadeSpecsFromConfig(cfg)
 	for _, spec := range specs {
-		entries, err := parseArcadeDAT(spec.DatPath)
+		info, err := os.Stat(spec.DatPath)
 		if err != nil {
-			return fmt.Errorf("verify %s dat: %w", spec.SetName, err)
+			if os.IsNotExist(err) {
+				return fmt.Errorf("dat file missing: %s (run: retro-collection-tool arcade dats update)", spec.DatPath)
+			}
+			return fmt.Errorf("stat dat %s: %w", spec.DatPath, err)
 		}
-		sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
-		emitInfo(g, "arcade", "dats", "verified", outputFields{
-			"set":          spec.SetName,
-			"path":         spec.DatPath,
-			"entries":      len(entries),
-			"games":        len(sel.Games),
-			"exclude_keys": strings.Join(cfg.ArcadeExcludeKeywords(), ","),
-		})
+		if info.IsDir() {
+			return fmt.Errorf("dat path is a directory: %s", spec.DatPath)
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("dat file is empty: %s", spec.DatPath)
+		}
+		emitInfo(g, "arcade", "dats", "verified", outputFields{"set": spec.SetName, "path": spec.DatPath, "size_bytes": info.Size()})
 	}
 	return nil
 }
 
-func runArcadeVerify(cfg *config.Config, g globalFlags) error {
+func runArcadeVerify(ctx context.Context, cfg *config.Config, runner arcadeIgirRunner, g globalFlags) error {
 	specs := arcadeSpecsFromConfig(cfg)
-	totalGames := 0
-	presentGames := 0
-	for _, spec := range specs {
-		report, err := verifyArcadeVaultSet(spec, cfg)
+	for i, spec := range specs {
+		args, err := buildArcadeIgirArgs(cfg, spec, true, false)
 		if err != nil {
 			return err
 		}
-		totalGames += report.TotalGames
-		presentGames += report.PresentGames
-		emitInfo(g, "arcade", "verify", "set report", outputFields{
-			"set":            report.SetName,
-			"vault":          report.VaultDir,
-			"total_games":    report.TotalGames,
-			"present_games":  report.PresentGames,
-			"missing_games":  report.MissingGames,
-			"missing_sample": strings.Join(report.MissingSamples, ","),
-		})
+		emitInfo(g, "arcade", "verify", "running igir verify", outputFields{"set": spec.SetName, "vault": spec.VaultDir, "dat": spec.DatPath, "index": fmt.Sprintf("%d/%d", i+1, len(specs))})
+		if g.verbose || g.dryRun {
+			emitInfo(g, "arcade", "verify", "igir command", outputFields{"set": spec.SetName, "cmd": strings.Join(args, " ")})
+		}
+		if err := runner.Run(ctx, args); err != nil {
+			return fmt.Errorf("arcade verify (%s): %w", spec.SetName, err)
+		}
 	}
-	emitInfo(g, "arcade", "verify", "summary", outputFields{
-		"sets":          len(specs),
-		"total_games":   totalGames,
-		"present_games": presentGames,
-		"missing_games": totalGames - presentGames,
-	})
+	emitInfo(g, "arcade", "verify", "summary", outputFields{"sets": len(specs)})
 	return nil
 }
 
-func runArcadeSync(cfg *config.Config, g globalFlags) error {
+func runArcadeSync(ctx context.Context, cfg *config.Config, runner arcadeIgirRunner, g globalFlags) error {
 	specs := arcadeSpecsFromConfig(cfg)
-	for _, spec := range specs {
-		report, err := linkArcadeSet(spec, cfg, g)
+	for i, spec := range specs {
+		args, err := buildArcadeIgirArgs(cfg, spec, false, g.dryRun)
 		if err != nil {
 			return err
 		}
-		emitInfo(g, "arcade", "sync", "set synced", outputFields{
-			"set":            report.SetName,
-			"vault":          report.VaultDir,
-			"library":        report.LibraryDir,
-			"linked_games":   report.LinkedGames,
-			"missing_games":  report.MissingGames,
-			"missing_sample": strings.Join(report.MissingSamples, ","),
-			"dry_run":        g.dryRun,
-		})
+		emitInfo(g, "arcade", "sync", "running igir sync", outputFields{"set": spec.SetName, "vault": spec.VaultDir, "library": spec.LibraryDir, "dat": spec.DatPath, "index": fmt.Sprintf("%d/%d", i+1, len(specs))})
+		if g.verbose || g.dryRun {
+			emitInfo(g, "arcade", "sync", "igir command", outputFields{"set": spec.SetName, "cmd": strings.Join(args, " ")})
+		}
+		if err := runner.Run(ctx, args); err != nil {
+			return fmt.Errorf("arcade sync (%s): %w", spec.SetName, err)
+		}
 	}
+	emitInfo(g, "arcade", "sync", "summary", outputFields{"sets": len(specs), "dry_run": g.dryRun})
 	return nil
+}
+
+func buildArcadeIgirArgs(cfg *config.Config, spec arcadeSetSpec, verifyOnly bool, dryRun bool) ([]string, error) {
+	outputDir := spec.LibraryDir
+	args := []string{"link"}
+	if verifyOnly || dryRun {
+		outputDir = filepath.Join(resolveCacheRoot(cfg), "arcade", "verify", spec.SetName)
+		if err := fsutil.RemoveIfExists(outputDir); err != nil {
+			return nil, err
+		}
+		if err := fsutil.EnsureDir(outputDir); err != nil {
+			return nil, err
+		}
+		reportPath := filepath.Join(resolveCacheRoot(cfg), "arcade", "reports", spec.SetName+"_%YYYY-%MM-%DDT%HH:%mm:%ss.csv")
+		if err := fsutil.EnsureDir(filepath.Dir(reportPath)); err != nil {
+			return nil, err
+		}
+		args = append(args, "report")
+		args = append(args, "--report-output", reportPath)
+	} else {
+		args = append(args, "clean")
+	}
+
+	args = append(args,
+		"--dat", spec.DatPath,
+		"--input", spec.VaultDir,
+		"--input-exclude", filepath.Join(spec.VaultDir, "**", "*.chd"),
+		"--output", outputDir,
+		"--link-mode", "hardlink",
+		"--merge-roms", "split",
+		"--exclude-disks",
+		"--no-bios",
+		"--no-device",
+	)
+	if !verifyOnly && !dryRun {
+		args = append(args, "--overwrite-invalid")
+	}
+	if min := strings.TrimSpace(cfg.Igir.InputChecksumMin); min != "" {
+		args = append(args, "--input-checksum-min", min)
+	}
+	return args, nil
 }
 
 func arcadeSpecsFromConfig(cfg *config.Config) []arcadeSetSpec {
@@ -210,242 +221,6 @@ func arcadeSpecsFromConfig(cfg *config.Config) []arcadeSetSpec {
 			LibraryDir: cfg.ArcadeLibraryFBNeo(),
 		},
 	}
-}
-
-func verifyArcadeVaultSet(spec arcadeSetSpec, cfg *config.Config) (arcadeSetReport, error) {
-	entries, err := parseArcadeDAT(spec.DatPath)
-	if err != nil {
-		return arcadeSetReport{}, fmt.Errorf("load %s dat %s: %w", spec.SetName, spec.DatPath, err)
-	}
-	archiveIndex, err := buildArcadeArchiveIndex(spec.VaultDir)
-	if err != nil {
-		return arcadeSetReport{}, err
-	}
-	sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
-	report := arcadeSetReport{
-		SetName:    spec.SetName,
-		VaultDir:   spec.VaultDir,
-		LibraryDir: spec.LibraryDir,
-		TotalGames: len(sel.Games),
-	}
-	for _, name := range sel.Games {
-		if _, ok := lookupArcadeArchive(archiveIndex, name); ok {
-			report.PresentGames++
-		} else {
-			report.MissingGames++
-			if len(report.MissingSamples) < 12 {
-				report.MissingSamples = append(report.MissingSamples, name)
-			}
-		}
-	}
-	return report, nil
-}
-
-func linkArcadeSet(spec arcadeSetSpec, cfg *config.Config, g globalFlags) (arcadeSetReport, error) {
-	report, err := verifyArcadeVaultSet(spec, cfg)
-	if err != nil {
-		return arcadeSetReport{}, err
-	}
-	if err := fsutil.EnsureDir(spec.LibraryDir); err != nil {
-		return arcadeSetReport{}, err
-	}
-	archiveIndex, err := buildArcadeArchiveIndex(spec.VaultDir)
-	if err != nil {
-		return arcadeSetReport{}, err
-	}
-
-	entries, err := parseArcadeDAT(spec.DatPath)
-	if err != nil {
-		return arcadeSetReport{}, fmt.Errorf("load %s dat %s: %w", spec.SetName, spec.DatPath, err)
-	}
-	sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
-	linkOne := func(name string) error {
-		src, ok := lookupArcadeArchive(archiveIndex, name)
-		if !ok {
-			return nil
-		}
-		dst := filepath.Join(spec.LibraryDir, filepath.Base(src))
-		if g.dryRun {
-			emitInfo(g, "arcade", "sync", "dry-run link", outputFields{"set": spec.SetName, "from": src, "to": dst})
-			report.LinkedGames++
-			return nil
-		}
-		if err := fsutil.LinkOrCopy(src, dst); err != nil {
-			return err
-		}
-		report.LinkedGames++
-		return nil
-	}
-
-	for _, name := range sel.Games {
-		if err := linkOne(name); err != nil {
-			return arcadeSetReport{}, err
-		}
-	}
-	return report, nil
-}
-
-func selectArcadeEntries(entries []arcadeDATEntry, excludeKeywords []string) arcadeSetSelection {
-	games := map[string]bool{}
-	for _, e := range entries {
-		if strings.TrimSpace(e.Name) == "" {
-			continue
-		}
-		if e.IsBios {
-			continue
-		}
-		if strings.TrimSpace(e.CloneOf) != "" {
-			continue
-		}
-		haystack := strings.ToLower(e.Name + " " + e.Description)
-		excluded := false
-		for _, raw := range excludeKeywords {
-			k := strings.ToLower(strings.TrimSpace(raw))
-			if k == "" {
-				continue
-			}
-			if strings.Contains(haystack, k) {
-				excluded = true
-				break
-			}
-		}
-		if excluded {
-			continue
-		}
-		games[e.Name] = true
-	}
-
-	gameNames := make([]string, 0, len(games))
-	for name := range games {
-		gameNames = append(gameNames, name)
-	}
-	sort.Strings(gameNames)
-
-	return arcadeSetSelection{Games: gameNames}
-}
-
-func parseArcadeDAT(path string) ([]arcadeDATEntry, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("dat file missing: %s (run: retro-collection-tool arcade dats update)", path)
-		}
-		return nil, err
-	}
-
-	trimmed := strings.TrimSpace(string(b))
-	if strings.HasPrefix(trimmed, "clrmamepro") {
-		return parseClrMameProDAT(string(b)), nil
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-
-	dec := xml.NewDecoder(f)
-	entries := make([]arcadeDATEntry, 0, 1024)
-	for {
-		tok, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parse dat xml %s: %w", path, err)
-		}
-		start, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		if start.Name.Local != "game" && start.Name.Local != "machine" {
-			continue
-		}
-
-		var node struct {
-			Name        string `xml:"name,attr"`
-			CloneOf     string `xml:"cloneof,attr"`
-			IsBios      string `xml:"isbios,attr"`
-			Description string `xml:"description"`
-		}
-		if err := dec.DecodeElement(&node, &start); err != nil {
-			return nil, fmt.Errorf("decode dat entry in %s: %w", path, err)
-		}
-		entries = append(entries, arcadeDATEntry{
-			Name:        strings.TrimSpace(node.Name),
-			Description: strings.TrimSpace(node.Description),
-			CloneOf:     strings.TrimSpace(node.CloneOf),
-			IsBios:      strings.EqualFold(strings.TrimSpace(node.IsBios), "yes"),
-		})
-	}
-	return entries, nil
-}
-
-var clrMameProRomNameRe = regexp.MustCompile(`(?i)rom\s*\(\s*name\s+"?([^"\s\)]+)"?`)
-
-func parseClrMameProDAT(content string) []arcadeDATEntry {
-	seen := map[string]bool{}
-	entries := make([]arcadeDATEntry, 0, 2048)
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		m := clrMameProRomNameRe.FindStringSubmatch(line)
-		if len(m) != 2 {
-			continue
-		}
-		name := strings.TrimSpace(m[1])
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		if name == "" {
-			continue
-		}
-		key := strings.ToLower(name)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		entries = append(entries, arcadeDATEntry{Name: name})
-	}
-	return entries
-}
-
-func buildArcadeArchiveIndex(root string) (map[string]string, error) {
-	index := map[string]string{}
-	if err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(d.Name()))
-		if ext != ".zip" && ext != ".7z" {
-			return nil
-		}
-		base := strings.ToLower(strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())))
-		if _, exists := index[base]; !exists {
-			index[base] = path
-		}
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("scan arcade vault %s: %w", root, err)
-	}
-	return index, nil
-}
-
-func lookupArcadeArchive(index map[string]string, name string) (string, bool) {
-	if index == nil {
-		return "", false
-	}
-	path, ok := index[strings.ToLower(strings.TrimSpace(name))]
-	if !ok {
-		return "", false
-	}
-	return path, true
 }
 
 func downloadFile(url, out string) error {

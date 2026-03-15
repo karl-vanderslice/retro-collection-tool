@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,115 +12,122 @@ import (
 	"github.com/karl-vanderslice/retro-collection-tool/internal/config"
 )
 
-func TestSelectArcadeEntriesFiltersAndDropsBios(t *testing.T) {
-	t.Parallel()
-
-	entries := []arcadeDATEntry{
-		{Name: "sf2", Description: "Street Fighter II"},
-		{Name: "sf2j", Description: "Street Fighter II (Japan)", CloneOf: "sf2"},
-		{Name: "mjgame", Description: "Super Mahjong Deluxe"},
-		{Name: "neogeo", Description: "Neo Geo Bios", IsBios: true},
-	}
-
-	sel := selectArcadeEntries(entries, []string{"mahjong"})
-	if len(sel.Games) != 1 || sel.Games[0] != "sf2" {
-		t.Fatalf("unexpected game selection: %#v", sel.Games)
-	}
-	for _, game := range sel.Games {
-		if game == "neogeo" {
-			t.Fatalf("expected bios entries to be ignored")
-		}
-	}
+type fakeArcadeRunner struct {
+	calls [][]string
+	err   error
 }
 
-func TestVerifyArcadeVaultSetReportsGamesOnly(t *testing.T) {
+func (f *fakeArcadeRunner) Run(_ context.Context, args []string) error {
+	clone := append([]string(nil), args...)
+	f.calls = append(f.calls, clone)
+	return f.err
+}
+
+func TestRunArcadeVerifyUsesIgirDryRun(t *testing.T) {
 	t.Parallel()
 
 	tmp := t.TempDir()
 	cfg := testArcadeConfig(tmp)
+	runner := &fakeArcadeRunner{}
+
 	specs := arcadeSpecsFromConfig(cfg)
-
-	if err := writeTestDAT(specs[0].DatPath, []string{
-		`<machine name="sf2"><description>Street Fighter II</description></machine>`,
-		`<machine name="sf2j" cloneof="sf2"><description>Street Fighter II (Japan)</description></machine>`,
-		`<machine name="mjgame"><description>Mahjong Carnival</description></machine>`,
-		`<machine name="neogeo" isbios="yes"><description>Neo Geo Bios</description></machine>`,
-	}); err != nil {
-		t.Fatalf("write mame dat: %v", err)
-	}
-	if err := os.MkdirAll(specs[0].VaultDir, 0o755); err != nil {
-		t.Fatalf("mkdir vault: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(specs[0].VaultDir, "sf2.zip"), []byte("rom"), 0o644); err != nil {
-		t.Fatalf("write game: %v", err)
+	for _, spec := range specs {
+		if err := os.MkdirAll(filepath.Dir(spec.DatPath), 0o755); err != nil {
+			t.Fatalf("mkdir dat dir: %v", err)
+		}
+		if err := os.WriteFile(spec.DatPath, []byte("dummy"), 0o644); err != nil {
+			t.Fatalf("write dat: %v", err)
+		}
 	}
 
-	report, err := verifyArcadeVaultSet(specs[0], cfg)
-	if err != nil {
-		t.Fatalf("verifyArcadeVaultSet: %v", err)
+	if err := runArcade(context.Background(), cfg, runner, globalFlags{}, []string{"verify"}); err != nil {
+		t.Fatalf("runArcade verify: %v", err)
 	}
-	if report.TotalGames != 1 || report.PresentGames != 1 || report.MissingGames != 0 {
-		t.Fatalf("unexpected game report: %#v", report)
+
+	if len(runner.calls) != 2 {
+		t.Fatalf("expected 2 igir calls, got %d", len(runner.calls))
+	}
+	for _, args := range runner.calls {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "link report") {
+			t.Fatalf("expected link report command, got %q", joined)
+		}
+		if !strings.Contains(joined, "--report-output") {
+			t.Fatalf("expected --report-output in verify command, got %q", joined)
+		}
+		if !strings.Contains(joined, "--no-bios") || !strings.Contains(joined, "--no-device") {
+			t.Fatalf("expected bios/device exclusion flags, got %q", joined)
+		}
 	}
 }
 
-func TestRunArcadeSyncLinksGamesOnly(t *testing.T) {
+func TestRunArcadeSyncUsesIgir(t *testing.T) {
 	t.Parallel()
 
 	tmp := t.TempDir()
 	cfg := testArcadeConfig(tmp)
+	runner := &fakeArcadeRunner{}
+
 	specs := arcadeSpecsFromConfig(cfg)
-
-	if err := writeTestDAT(specs[0].DatPath, []string{
-		`<machine name="sf2"><description>Street Fighter II</description></machine>`,
-		`<machine name="sf2j" cloneof="sf2"><description>Street Fighter II (Japan)</description></machine>`,
-		`<machine name="neogeo" isbios="yes"><description>Neo Geo Bios</description></machine>`,
-	}); err != nil {
-		t.Fatalf("write mame dat: %v", err)
-	}
-	if err := writeTestDAT(specs[1].DatPath, []string{
-		`<game name="kof98"><description>King of Fighters '98</description></game>`,
-		`<game name="neogeo" isbios="yes"><description>Neo Geo Bios</description></game>`,
-	}); err != nil {
-		t.Fatalf("write fbneo dat: %v", err)
-	}
-
-	if err := os.MkdirAll(specs[0].VaultDir, 0o755); err != nil {
-		t.Fatalf("mkdir mame vault: %v", err)
-	}
-	if err := os.MkdirAll(specs[1].VaultDir, 0o755); err != nil {
-		t.Fatalf("mkdir fbneo vault: %v", err)
-	}
-	mameNested := filepath.Join(specs[0].VaultDir, "set-a")
-	fbNested := filepath.Join(specs[1].VaultDir, "set-b")
-	if err := os.MkdirAll(mameNested, 0o755); err != nil {
-		t.Fatalf("mkdir nested mame vault: %v", err)
-	}
-	if err := os.MkdirAll(fbNested, 0o755); err != nil {
-		t.Fatalf("mkdir nested fbneo vault: %v", err)
-	}
-
-	mameGame := filepath.Join(mameNested, "sf2.zip")
-	fbGame := filepath.Join(fbNested, "kof98.zip")
-
-	for _, p := range []string{mameGame, fbGame} {
-		if err := os.WriteFile(p, []byte("rom"), 0o644); err != nil {
-			t.Fatalf("write vault file %s: %v", p, err)
+	for _, spec := range specs {
+		if err := os.MkdirAll(filepath.Dir(spec.DatPath), 0o755); err != nil {
+			t.Fatalf("mkdir dat dir: %v", err)
+		}
+		if err := os.WriteFile(spec.DatPath, []byte("dummy"), 0o644); err != nil {
+			t.Fatalf("write dat: %v", err)
 		}
 	}
 
-	if err := runArcade(cfg, globalFlags{}, []string{"sync"}); err != nil {
+	if err := runArcade(context.Background(), cfg, runner, globalFlags{dryRun: true}, []string{"sync"}); err != nil {
 		t.Fatalf("runArcade sync: %v", err)
 	}
 
-	assertHardLinked(t, mameGame, filepath.Join(specs[0].LibraryDir, "sf2.zip"))
-	assertHardLinked(t, fbGame, filepath.Join(specs[1].LibraryDir, "kof98.zip"))
-
-	if _, err := os.Stat(filepath.Join(specs[0].LibraryDir, "sf2j.zip")); !os.IsNotExist(err) {
-		t.Fatalf("expected clone not to be linked")
+	if len(runner.calls) != 2 {
+		t.Fatalf("expected 2 igir calls, got %d", len(runner.calls))
 	}
-	if _, err := os.Stat(filepath.Join(specs[0].LibraryDir, "neogeo.zip")); !os.IsNotExist(err) {
-		t.Fatalf("expected bios not to be linked")
+	for _, args := range runner.calls {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "link report") {
+			t.Fatalf("expected link report command for dry-run sync, got %q", joined)
+		}
+		if !strings.Contains(joined, "--report-output") {
+			t.Fatalf("expected --report-output in dry-run sync command, got %q", joined)
+		}
+	}
+}
+
+func TestRunArcadeSyncUsesIgirCleanWhenNotDryRun(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	cfg := testArcadeConfig(tmp)
+	runner := &fakeArcadeRunner{}
+
+	specs := arcadeSpecsFromConfig(cfg)
+	for _, spec := range specs {
+		if err := os.MkdirAll(filepath.Dir(spec.DatPath), 0o755); err != nil {
+			t.Fatalf("mkdir dat dir: %v", err)
+		}
+		if err := os.WriteFile(spec.DatPath, []byte("dummy"), 0o644); err != nil {
+			t.Fatalf("write dat: %v", err)
+		}
+	}
+
+	if err := runArcade(context.Background(), cfg, runner, globalFlags{}, []string{"sync"}); err != nil {
+		t.Fatalf("runArcade sync: %v", err)
+	}
+
+	if len(runner.calls) != 2 {
+		t.Fatalf("expected 2 igir calls, got %d", len(runner.calls))
+	}
+	for _, args := range runner.calls {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "link clean") {
+			t.Fatalf("expected link clean command, got %q", joined)
+		}
+		if strings.Contains(joined, "--report-output") {
+			t.Fatalf("did not expect --report-output in non-dry sync command, got %q", joined)
+		}
 	}
 }
 
@@ -130,9 +138,9 @@ func TestRunArcadeDatsUpdateDownloads(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/mame.dat":
-			_, _ = w.Write([]byte("<datafile><machine name=\"sf2\"><description>Street Fighter II</description></machine></datafile>"))
+			_, _ = w.Write([]byte("clrmamepro (\n  name \"mame\"\n)"))
 		case "/fbneo.dat":
-			_, _ = w.Write([]byte("<datafile><game name=\"kof98\"><description>KOF</description></game></datafile>"))
+			_, _ = w.Write([]byte("<datafile></datafile>"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -143,7 +151,7 @@ func TestRunArcadeDatsUpdateDownloads(t *testing.T) {
 	cfg.Arcade.DatMAME2003URL = server.URL + "/mame.dat"
 	cfg.Arcade.DatFBNeoURL = server.URL + "/fbneo.dat"
 
-	if err := runArcade(cfg, globalFlags{}, []string{"dats", "update"}); err != nil {
+	if err := runArcade(context.Background(), cfg, &fakeArcadeRunner{}, globalFlags{}, []string{"dats", "update"}); err != nil {
 		t.Fatalf("runArcade dats update: %v", err)
 	}
 
@@ -155,10 +163,27 @@ func TestRunArcadeDatsUpdateDownloads(t *testing.T) {
 	}
 }
 
+func TestRunArcadeDatsVerifyRequiresExistingDats(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	cfg := testArcadeConfig(tmp)
+	err := runArcade(context.Background(), cfg, &fakeArcadeRunner{}, globalFlags{}, []string{"dats", "verify"})
+	if err == nil {
+		t.Fatalf("expected missing dat error")
+	}
+	if !strings.Contains(err.Error(), "run: retro-collection-tool arcade dats update") {
+		t.Fatalf("expected update guidance in error: %v", err)
+	}
+}
+
 func testArcadeConfig(root string) *config.Config {
 	return &config.Config{
 		Root:     root,
 		CacheDir: "cache",
+		Igir: config.IgirConfig{
+			InputChecksumMin: "CRC32",
+		},
 		Paths: config.PathsConfig{
 			RommLibraryRoms: "roms/Library/roms",
 		},
@@ -172,83 +197,6 @@ func testArcadeConfig(root string) *config.Config {
 			LibraryFBNeo:      "roms/Library/roms/arcade/fbneo",
 			DatMAME2003File:   "arcade-mame-2003-plus.dat",
 			DatFBNeoFile:      "arcade-fbneo.dat",
-			ExcludeKeywords:   []string{"mahjong"},
 		},
-	}
-}
-
-func writeTestDAT(path string, nodes []string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	xml := "<datafile>" + strings.Join(nodes, "") + "</datafile>"
-	return os.WriteFile(path, []byte(xml), 0o644)
-}
-
-func assertHardLinked(t *testing.T, src, dst string) {
-	t.Helper()
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		t.Fatalf("stat src %s: %v", src, err)
-	}
-	dstInfo, err := os.Stat(dst)
-	if err != nil {
-		t.Fatalf("stat dst %s: %v", dst, err)
-	}
-	if !os.SameFile(srcInfo, dstInfo) {
-		t.Fatalf("expected hard link between %s and %s", src, dst)
-	}
-}
-
-func TestRunArcadeDatsVerifyRequiresExistingDats(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	cfg := testArcadeConfig(tmp)
-	err := runArcade(cfg, globalFlags{}, []string{"dats", "verify"})
-	if err == nil {
-		t.Fatalf("expected missing dat error")
-	}
-	if got := err.Error(); got == "" {
-		t.Fatalf("expected non-empty error")
-	}
-	if !strings.Contains(err.Error(), "run: retro-collection-tool arcade dats update") {
-		t.Fatalf("expected update guidance in error: %v", err)
-	}
-}
-
-func TestParseArcadeDATSupportsClrMameProFormat(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	datPath := filepath.Join(tmp, "mame-2003-plus.dat")
-	content := strings.Join([]string{
-		`clrmamepro (`,
-		`  name "MAME 2003-Plus - Working Romsets"`,
-		`)`,
-		``,
-		`game (`,
-		`  name "1941 - Counter Attack (World)"`,
-		`  rom ( name 1941.zip size 1419125 crc 9389CD2E )`,
-		`)`,
-		``,
-		`game (`,
-		`  name "1942"`,
-		`  rom ( name "1942.zip" size 123 crc deadbeef )`,
-		`)`,
-	}, "\n")
-	if err := os.WriteFile(datPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write dat: %v", err)
-	}
-
-	entries, err := parseArcadeDAT(datPath)
-	if err != nil {
-		t.Fatalf("parseArcadeDAT: %v", err)
-	}
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
-	if entries[0].Name != "1941" || entries[1].Name != "1942" {
-		t.Fatalf("unexpected parsed names: %#v", entries)
 	}
 }

@@ -107,15 +107,11 @@ Prints enabled systems.
 Arcade workflow is feature-gated by `features.enable_arcade` and now supports:
 
 - `arcade dats update`: download/update MAME 2003 Plus and FBNeo DAT files into cache.
-- `arcade dats verify`: parse and validate cached DAT files.
-- `arcade verify`: verify Vault coverage for selected game entries from DATs.
-- `arcade sync`: hardlink/copy selected game archives from Vault into ROMM library targets.
+- `arcade dats verify`: ensure cached DAT files exist and are non-empty.
+- `arcade verify`: run Igir in dry-run mode against arcade DAT + vault inputs.
+- `arcade sync`: run Igir with hardlink output into ROMM library targets.
 
-Filtering aligns with BestArcade's core goal for game removal:
-
-- Excludes clones (`cloneof` entries).
-- Excludes BIOS from arcade processing.
-- Excludes entries matching configured keyword filters (`arcade.exclude_keywords`), for categories such as mahjong/gambling/adult/electromechanical.
+Arcade processing now delegates compatibility/filtering logic to Igir and DAT semantics.
 
 Examples:
 

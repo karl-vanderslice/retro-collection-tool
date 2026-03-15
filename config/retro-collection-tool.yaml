@@ -25,7 +25,6 @@ arcade:
   dat_fbneo_url: https://git.libretro.com/libretro/FBNeo/-/raw/master/dats/FinalBurn%20Neo%20%28ClrMame%20Pro%20XML%2C%20Arcade%20only%29.dat
   dat_mame_2003_plus_file: arcade-mame-2003-plus.dat
   dat_fbneo_file: arcade-fbneo.dat
-  exclude_keywords: ["mahjong", "medal", "gambl", "adult", "hentai", "electromechanical"]
 
 paths:
   vault_no_intro: roms/Vault/NoIntro/NoIntro

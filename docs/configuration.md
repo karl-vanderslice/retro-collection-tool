@@ -91,9 +91,8 @@ Arcade workflow configuration is defined under `arcade`:
 - `dat_fbneo_url`: URL used by `arcade dats update`.
 - `dat_mame_2003_plus_file`: cached DAT filename under `<cache>/arcade/dats`.
 - `dat_fbneo_file`: cached DAT filename under `<cache>/arcade/dats`.
-- `exclude_keywords`: case-insensitive keyword filters applied to DAT game entries (name+description).
 
-Arcade verification and sync are currently game-only and ignore DAT-marked BIOS entries.
+Arcade verification and sync use Igir with DAT-driven behavior and `--no-bios --no-device` flags.
 
 Retail DAT selection always picks the latest matching `.dat` by modification time.
 

@@ -75,15 +75,14 @@ type BiosConfig struct {
 }
 
 type ArcadeConfig struct {
-	VaultMAME2003Plus string   `yaml:"vault_mame_2003_plus"`
-	VaultFBNeo        string   `yaml:"vault_fbneo"`
-	LibraryMAME2003   string   `yaml:"library_mame_2003_plus"`
-	LibraryFBNeo      string   `yaml:"library_fbneo"`
-	DatMAME2003URL    string   `yaml:"dat_mame_2003_plus_url"`
-	DatFBNeoURL       string   `yaml:"dat_fbneo_url"`
-	DatMAME2003File   string   `yaml:"dat_mame_2003_plus_file"`
-	DatFBNeoFile      string   `yaml:"dat_fbneo_file"`
-	ExcludeKeywords   []string `yaml:"exclude_keywords"`
+	VaultMAME2003Plus string `yaml:"vault_mame_2003_plus"`
+	VaultFBNeo        string `yaml:"vault_fbneo"`
+	LibraryMAME2003   string `yaml:"library_mame_2003_plus"`
+	LibraryFBNeo      string `yaml:"library_fbneo"`
+	DatMAME2003URL    string `yaml:"dat_mame_2003_plus_url"`
+	DatFBNeoURL       string `yaml:"dat_fbneo_url"`
+	DatMAME2003File   string `yaml:"dat_mame_2003_plus_file"`
+	DatFBNeoFile      string `yaml:"dat_fbneo_file"`
 }
 
 type BootstrapDirectoryLayout struct {
@@ -298,11 +297,4 @@ func (c *Config) ArcadeDatFBNeoFile() string {
 		return v
 	}
 	return "arcade-fbneo.dat"
-}
-
-func (c *Config) ArcadeExcludeKeywords() []string {
-	if len(c.Arcade.ExcludeKeywords) > 0 {
-		return c.Arcade.ExcludeKeywords
-	}
-	return []string{"mahjong", "medal", "gambl", "adult", "hentai", "electromechanical"}
 }

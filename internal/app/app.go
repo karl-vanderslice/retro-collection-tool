@@ -114,7 +114,7 @@ func Run(args []string) error {
 	case "redump":
 		return runRedumpStub(cfg)
 	case "arcade":
-		return runArcade(cfg, globals, rest[1:])
+		return runArcade(ctx, cfg, runner, globals, rest[1:])
 	case "cache":
 		return runCache(cfg, globals, rest[1:])
 	case "clean":

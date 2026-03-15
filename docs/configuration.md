@@ -35,6 +35,9 @@ If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-t
 
 - `binary`: preferred executable (default `igir`).
 - `use_npx_fallback`: when true, use `npx --yes igir@latest` if `igir` is unavailable.
+
+When using the provided Nix dev shell, prefer `use_npx_fallback: false` so `igir` is fully pinned via `flake.lock`.
+
 - `prefer_region`, `prefer_language`: applied during retail sync selection.
 - `input_checksum_min`: checksum floor, for example `CRC32`.
 - `cache_retail_file`, `cache_hacks_file`: cache file names.

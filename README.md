@@ -74,6 +74,8 @@ If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-t
 
 Host dependency model is Nix-only.
 
+The Nix dev shell provides pinned arcade tooling via `flake.lock`, including `igir` and `chdman` (`mame-tools`), so arcade workflows do not need `npx` downloads when running inside the shell.
+
 - `nix develop path:. --accept-flake-config -c make fmt`
 - `nix develop path:. --accept-flake-config -c make lint`
 - `nix develop path:. --accept-flake-config -c make test`

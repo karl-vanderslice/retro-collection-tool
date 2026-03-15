@@ -41,6 +41,8 @@
             go
             gopls
             golangci-lint
+            igir
+            mame-tools
             ripgrep
             nodejs_22
             nodePackages.prettier

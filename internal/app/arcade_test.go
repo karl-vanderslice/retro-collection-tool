@@ -90,9 +90,17 @@ func TestRunArcadeSyncLinksGamesOnly(t *testing.T) {
 	if err := os.MkdirAll(specs[1].VaultDir, 0o755); err != nil {
 		t.Fatalf("mkdir fbneo vault: %v", err)
 	}
+	mameNested := filepath.Join(specs[0].VaultDir, "set-a")
+	fbNested := filepath.Join(specs[1].VaultDir, "set-b")
+	if err := os.MkdirAll(mameNested, 0o755); err != nil {
+		t.Fatalf("mkdir nested mame vault: %v", err)
+	}
+	if err := os.MkdirAll(fbNested, 0o755); err != nil {
+		t.Fatalf("mkdir nested fbneo vault: %v", err)
+	}
 
-	mameGame := filepath.Join(specs[0].VaultDir, "sf2.zip")
-	fbGame := filepath.Join(specs[1].VaultDir, "kof98.zip")
+	mameGame := filepath.Join(mameNested, "sf2.zip")
+	fbGame := filepath.Join(fbNested, "kof98.zip")
 
 	for _, p := range []string{mameGame, fbGame} {
 		if err := os.WriteFile(p, []byte("rom"), 0o644); err != nil {

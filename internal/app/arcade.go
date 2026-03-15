@@ -215,6 +215,10 @@ func verifyArcadeVaultSet(spec arcadeSetSpec, cfg *config.Config) (arcadeSetRepo
 	if err != nil {
 		return arcadeSetReport{}, fmt.Errorf("load %s dat %s: %w", spec.SetName, spec.DatPath, err)
 	}
+	archiveIndex, err := buildArcadeArchiveIndex(spec.VaultDir)
+	if err != nil {
+		return arcadeSetReport{}, err
+	}
 	sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
 	report := arcadeSetReport{
 		SetName:    spec.SetName,
@@ -223,7 +227,7 @@ func verifyArcadeVaultSet(spec arcadeSetSpec, cfg *config.Config) (arcadeSetRepo
 		TotalGames: len(sel.Games),
 	}
 	for _, name := range sel.Games {
-		if _, ok := findArcadeArchive(spec.VaultDir, name); ok {
+		if _, ok := lookupArcadeArchive(archiveIndex, name); ok {
 			report.PresentGames++
 		} else {
 			report.MissingGames++
@@ -243,6 +247,10 @@ func linkArcadeSet(spec arcadeSetSpec, cfg *config.Config, g globalFlags) (arcad
 	if err := fsutil.EnsureDir(spec.LibraryDir); err != nil {
 		return arcadeSetReport{}, err
 	}
+	archiveIndex, err := buildArcadeArchiveIndex(spec.VaultDir)
+	if err != nil {
+		return arcadeSetReport{}, err
+	}
 
 	entries, err := parseArcadeDAT(spec.DatPath)
 	if err != nil {
@@ -250,7 +258,7 @@ func linkArcadeSet(spec arcadeSetSpec, cfg *config.Config, g globalFlags) (arcad
 	}
 	sel := selectArcadeEntries(entries, cfg.ArcadeExcludeKeywords())
 	linkOne := func(name string) error {
-		src, ok := findArcadeArchive(spec.VaultDir, name)
+		src, ok := lookupArcadeArchive(archiveIndex, name)
 		if !ok {
 			return nil
 		}
@@ -363,17 +371,39 @@ func parseArcadeDAT(path string) ([]arcadeDATEntry, error) {
 	return entries, nil
 }
 
-func findArcadeArchive(root, name string) (string, bool) {
-	candidates := []string{
-		filepath.Join(root, name+".zip"),
-		filepath.Join(root, name+".7z"),
-	}
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c, true
+func buildArcadeArchiveIndex(root string) (map[string]string, error) {
+	index := map[string]string{}
+	if err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(d.Name()))
+		if ext != ".zip" && ext != ".7z" {
+			return nil
+		}
+		base := strings.ToLower(strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())))
+		if _, exists := index[base]; !exists {
+			index[base] = path
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("scan arcade vault %s: %w", root, err)
 	}
-	return "", false
+	return index, nil
+}
+
+func lookupArcadeArchive(index map[string]string, name string) (string, bool) {
+	if index == nil {
+		return "", false
+	}
+	path, ok := index[strings.ToLower(strings.TrimSpace(name))]
+	if !ok {
+		return "", false
+	}
+	return path, true
 }
 
 func downloadFile(url, out string) error {

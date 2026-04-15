@@ -48,8 +48,7 @@
             nodePackages.prettier
             shellcheck
             shfmt
-            mkdocs
-            pkgs.python3Packages."mkdocs-material"
+            zensical
             gh
             findutils
             coreutils

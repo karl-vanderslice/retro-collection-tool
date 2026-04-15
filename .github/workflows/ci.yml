@@ -15,22 +15,24 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Enable Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v7
+        uses: DeterminateSystems/magic-nix-cache-action@v13
 
       - name: Format Check
-        run: nix develop path:. --accept-flake-config -c make fmt && git diff --exit-code
+        run: |
+          nix shell nixpkgs#just -c just fmt
+          git diff --exit-code
 
       - name: Lint
-        run: nix develop path:. --accept-flake-config -c make lint
+        run: nix shell nixpkgs#just -c just lint
 
       - name: Test
-        run: nix develop path:. --accept-flake-config -c make test
+        run: nix shell nixpkgs#just -c just test
 
       - name: Build
-        run: nix develop path:. --accept-flake-config -c make build
+        run: nix shell nixpkgs#just -c just build
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
@@ -57,16 +59,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Enable Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v7
+        uses: DeterminateSystems/magic-nix-cache-action@v13
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Build MkDocs site
-        run: nix develop path:. --accept-flake-config -c make docs-build
+      - name: Build docs
+        run: nix shell nixpkgs#just -c just docs-build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

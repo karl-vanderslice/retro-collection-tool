@@ -2,17 +2,7 @@
 
 retro-collection-tool is a production-focused CLI that wraps Igir for curated ROM library workflows targeting ROMM.
 
-## Why This Exists
-
-Managing ROM libraries manually does not scale. This tool standardizes common workflows so they are:
-
-- repeatable
-- scriptable
-- safer to run in automation
-
-The CLI emphasizes deterministic behavior, explicit validation, and predictable output structure.
-
-## Current Scope
+## Current scope
 
 Implemented:
 
@@ -31,7 +21,7 @@ Explicitly stubbed behind feature flags:
 
 ReDump support is available through retail sync configuration (`retail_dat_source: redump`) rather than a standalone full workflow.
 
-## Typical Workflow
+## Typical workflow
 
 1. Set your library root in user config or `RETRO_COLLECTION_TOOL_ROOT`.
 2. Run `bootstrap` once to create expected directory scaffolding.
@@ -39,7 +29,7 @@ ReDump support is available through retail sync configuration (`retail_dat_sourc
 4. Run without `--dry-run` after validating command output.
 5. Use `export` for target-specific copies.
 
-## Start Here
+## Start here
 
 - Read [Configuration](configuration.md) for config layering and key settings.
 - Read [Commands](commands.md) for examples and flags.

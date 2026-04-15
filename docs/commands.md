@@ -1,6 +1,6 @@
 # Commands
 
-## Global Flags
+## Global flags
 
 - `--config <path>`: add a highest-precedence config file layer.
 - `--dry-run`: validate and print planned actions without writing changes.

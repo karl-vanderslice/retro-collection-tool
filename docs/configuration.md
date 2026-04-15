@@ -17,7 +17,7 @@ Finally, `RETRO_COLLECTION_TOOL_ROOT` overrides merged `root`.
 
 When `XDG_CONFIG_HOME` is unset, `~/.config` is used.
 
-## Recommended Setup
+## Recommended setup
 
 - Keep machine-specific `root` out of repository-tracked config.
 - Put personal overrides in XDG user config.

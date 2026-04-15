@@ -7,7 +7,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 - Docs site: <https://karl-vanderslice.github.io/retro-collection-tool/>
 - Docs source: `docs/`
 
-## What It Does
+## What it does
 
 - Runs repeatable, config-driven ROM workflows with strict validation.
 - Syncs retail ROM sets using the latest matching DAT (No-Intro or ReDump).
@@ -15,7 +15,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 - Imports BIOS files from configured source roots using catalog matching and optional hash verification.
 - Exports selected systems to an external destination (for example, SD card media).
 
-## Quick Start
+## Quick start
 
 1. Enter the Nix environment:
    - `direnv allow`, or
@@ -29,7 +29,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 5. Preview a sync without writes:
    - `bin/retro-collection-tool --dry-run sync --systems nes,snes,genesis,sms`
 
-## Commands (At A Glance)
+## Commands at a glance
 
 - `sync --systems <csv> | --all-systems [--compress] [--no-hacks]`
 - `hacks --systems <csv> | --all-systems [--no-move-retail]`
@@ -64,7 +64,7 @@ Recommended practice:
 
 If `cache_dir` is omitted, cache defaults to `$XDG_CACHE_HOME/retro-collection-tool` (or `~/.cache/retro-collection-tool`).
 
-## Safety And Behavior
+## Safety and behavior
 
 - `--dry-run` validates input and prints planned operations without writes.
 - Commands fail fast and return non-zero on errors.
@@ -82,13 +82,13 @@ The Nix dev shell provides pinned arcade tooling via `flake.lock`, including `ig
 - `nix develop path:. --accept-flake-config -c make build`
 - `nix develop path:. --accept-flake-config -c make docs-serve`
 
-## CI And Docs Publishing
+## CI and docs publishing
 
-GitHub Actions runs on push to `master` and performs:
+GitHub Actions runs on push to `master`:
 
-- format check (`make fmt` + clean diff)
-- lint (`make lint`)
-- tests (`make test`)
-- build (`make build`)
+1. Format check (`make fmt` + clean diff).
+2. Lint (`make lint`).
+3. Tests (`make test`).
+4. Build (`make build`).
 
-If those pass, CI builds MkDocs and deploys to GitHub Pages using the official Pages workflow.
+If all steps pass, CI builds MkDocs and deploys to GitHub Pages.

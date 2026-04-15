@@ -18,3 +18,8 @@ nav = [
 
 [project.theme]
 variant = "modern"
+logo = "images/retro-collection-tool-icon.svg"
+favicon = "images/retro-collection-tool-icon.svg"
+
+[project.theme.palette]
+scheme = "slate"

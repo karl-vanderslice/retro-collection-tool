@@ -1,37 +1,35 @@
-# retro-collection-tool
+# Retro Collection Tool
 
-retro-collection-tool is a production-focused CLI that wraps Igir for curated ROM library workflows targeting ROMM.
+[← docs.vslice.net](https://docs.vslice.net){ .md-button }
 
-## Current scope
+CLI that wraps [Igir](https://igir.io/) to turn loose ROM dumps into clean,
+[ROMM](https://github.com/rommapp/romm)-ready libraries. Handles retail sync,
+hacks patching, BIOS import, arcade DAT workflows, and SD-card export.
 
-Implemented:
+## Capabilities
 
-- retail sync
-- hacks workflow
-- BIOS import workflow
-- arcade dat update/verify workflow
-- arcade vault verify and hardlink sync
-- export workflow
-- cache controls
-- directory bootstrap
-
-Explicitly stubbed behind feature flags:
-
-- ReDump standalone workflow command
-
-ReDump support is available through retail sync configuration (`retail_dat_source: redump`) rather than a standalone full workflow.
+| Workflow | Status |
+| --- | --- |
+| Retail sync (hardlinks via Igir) | Implemented |
+| Hacks patching (`rompatcherjs`) | Implemented |
+| BIOS import with catalog matching | Implemented |
+| Arcade DAT update, verify, sync | Implemented |
+| Export to SD cards | Implemented |
+| Cache controls | Implemented |
+| Directory bootstrap | Implemented |
+| ReDump standalone command | Stubbed (available via `retail_dat_source: redump`) |
 
 ## Typical workflow
 
 1. Set your library root in user config or `RETRO_COLLECTION_TOOL_ROOT`.
-2. Run `bootstrap` once to create expected directory scaffolding.
+2. Run `bootstrap` to create the expected directory structure.
 3. Use `sync` (or `hacks`) with `--dry-run` first.
 4. Run without `--dry-run` after validating command output.
 5. Use `export` for target-specific copies.
 
 ## Start here
 
-- Read [Configuration](configuration.md) for config layering and key settings.
-- Read [Commands](commands.md) for examples and flags.
-- Read [RomVault Arcade Workflow (Stub)](workflow-romvault-arcade.md) for the planned vault sorting process notes.
-- Read [Architecture](architecture.md) if you plan to contribute.
+- [Configuration](configuration.md) — config layering and key settings
+- [Commands](commands.md) — CLI examples and flags
+- [RomVault Arcade Workflow](workflow-romvault-arcade.md) — vault sorting process notes
+- [Architecture](architecture.md) — internal design for contributors

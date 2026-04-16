@@ -23,7 +23,7 @@ jobs:
       - name: Go vulnerability scan
         run: nix shell nixpkgs#go nixpkgs#govulncheck -c govulncheck ./...
       - name: OSV vulnerability scan
-        uses: google/osv-scanner-action@v2.3.5
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
         with:
           scan-args: |-
             -r

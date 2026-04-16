@@ -23,13 +23,12 @@ hooks-install:
     nix develop -c pre-commit install --install-hooks
 
 fmt:
-    nix develop -c gofmt -w $(find . -type f -name '*.go' -not -path './vendor/*')
-    nix develop -c prettier --write "**/*.{md,json,yaml,yml}"
+    nix fmt
 
 lint:
     nix develop -c golangci-lint run ./...
     nix develop -c shellcheck scripts/*.sh
-    nix develop -c prettier --check "**/*.{md,json,yaml,yml}"
+    nix fmt -- --fail-on-change
 
 tidy:
     nix develop -c go mod tidy

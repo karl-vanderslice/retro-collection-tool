@@ -1,4 +1,5 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set quiet
 
 binary := "retro-collection-tool"
 pkg := "./cmd/retro-collection-tool"

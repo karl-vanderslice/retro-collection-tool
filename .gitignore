@@ -9,7 +9,6 @@ result/
 *.swo
 coverage.out
 site/
-!flake.lock
 .pre-commit-config.yaml
 .envrc.local
 !.envrc

@@ -21,7 +21,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
    - `direnv allow`, or
    - `nix develop path:. --accept-flake-config`
 2. Build the binary:
-   - `nix develop path:. --accept-flake-config -c make build`
+   - `just build`
 3. Inspect enabled systems:
    - `bin/retro-collection-tool systems`
 4. Create required folder layout safely (create-only):
@@ -76,19 +76,19 @@ Host dependency model is Nix-only.
 
 The Nix dev shell provides pinned arcade tooling via `flake.lock`, including `igir` and `chdman` (`mame-tools`), so arcade workflows do not need `npx` downloads when running inside the shell.
 
-- `nix develop path:. --accept-flake-config -c make fmt`
-- `nix develop path:. --accept-flake-config -c make lint`
-- `nix develop path:. --accept-flake-config -c make test`
-- `nix develop path:. --accept-flake-config -c make build`
-- `nix develop path:. --accept-flake-config -c make docs-serve`
+- `just fmt`
+- `just lint`
+- `just test`
+- `just build`
+- `just docs-serve`
 
 ## CI and docs publishing
 
 GitHub Actions runs on push to `master`:
 
-1. Format check (`make fmt` + clean diff).
-2. Lint (`make lint`).
-3. Tests (`make test`).
-4. Build (`make build`).
+1. Format check (`just fmt` + clean diff).
+2. Lint (`just lint`).
+3. Tests (`just test`).
+4. Build (`just build`).
 
 If all steps pass, CI builds MkDocs and deploys to GitHub Pages.

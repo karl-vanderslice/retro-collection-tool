@@ -9,6 +9,7 @@ site_dir = "site"
 
 nav = [
   { Home = "index.md" },
+  { README = "README.md" },
   { Configuration = "configuration.md" },
   { Commands = "commands.md" },
   { "RomVault Arcade Workflow" = "workflow-romvault-arcade.md" },

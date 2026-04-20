@@ -46,6 +46,10 @@ jobs:
     timeout-minutes: 20
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    env:
+      CLOUDFLARE_API_TOKEN_PRESENT: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      CLOUDFLARE_ACCOUNT_ID_PRESENT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      CLOUDFLARE_PAGES_PROJECT_PRESENT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT != '' }}
 
     steps:
       - name: Checkout
@@ -61,12 +65,12 @@ jobs:
         run: nix shell nixpkgs#just -c just docs-build
 
       - name: Warn when Cloudflare deploy is skipped
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' || secrets.CLOUDFLARE_PAGES_PROJECT == '' }}
+        if: ${{ env.CLOUDFLARE_API_TOKEN_PRESENT != 'true' || env.CLOUDFLARE_ACCOUNT_ID_PRESENT != 'true' || env.CLOUDFLARE_PAGES_PROJECT_PRESENT != 'true' }}
         run: |
           echo "::warning::Skipping Cloudflare Pages deploy because one or more Cloudflare deploy secrets are not configured."
 
       - name: Deploy to Cloudflare Pages
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.CLOUDFLARE_PAGES_PROJECT != '' }}
+        if: ${{ env.CLOUDFLARE_API_TOKEN_PRESENT == 'true' && env.CLOUDFLARE_ACCOUNT_ID_PRESENT == 'true' && env.CLOUDFLARE_PAGES_PROJECT_PRESENT == 'true' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

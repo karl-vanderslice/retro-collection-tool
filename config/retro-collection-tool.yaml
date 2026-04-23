@@ -3,8 +3,8 @@ cache_dir: cache
 igir:
   binary: igir
   use_npx_fallback: false
-  prefer_region: ["USA", "JPN", "WORLD", "EUR"]
-  prefer_language: ["EN", "JA"]
+  prefer_region: [ "USA", "JPN", "WORLD", "EUR" ]
+  prefer_language: [ "EN", "JA" ]
   input_checksum_min: CRC32
   cache_retail_file: igir_retail.cache
   cache_hacks_file: igir_hacks.cache

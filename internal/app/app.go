@@ -49,6 +49,7 @@ var patchExtensions = map[string]bool{
 var knownCommands = []string{
 	"sync",
 	"hacks",
+	"curated",
 	"bios",
 	"redump",
 	"arcade",
@@ -109,6 +110,8 @@ func Run(args []string) error {
 		return runSync(ctx, cfg, runner, globals, rest[1:])
 	case "hacks":
 		return runHacks(ctx, cfg, globals, rest[1:])
+	case "curated":
+		return runCurated(globals, rest[1:])
 	case "bios":
 		return runBios(cfg, globals, rest[1:])
 	case "redump":
@@ -1249,6 +1252,7 @@ Global flags:
 Commands:
   sync        Run retail sync with Igir
   hacks       Run curated ROM hacks patch workflow
+	curated     Convert curated set layouts (Done Set 3 -> NextUI)
 	clean       Remove target output directories for selected systems
 	bios        BIOS import workflow with strict hash matching
 	redump      ReDump workflow (stub)
@@ -1262,6 +1266,7 @@ Commands:
 Examples:
 	retro-collection-tool sync --systems snes,genesis
 	retro-collection-tool hacks --all-systems
+	retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
 	retro-collection-tool bios --systems gba --strict
 	retro-collection-tool arcade dats update
 	retro-collection-tool arcade verify
@@ -1287,6 +1292,13 @@ Examples:
 Examples:
 	retro-collection-tool hacks --systems snes
 	retro-collection-tool --dry-run hacks --all-systems --no-move-retail`)
+	case "curated":
+		fmt.Println(`Usage:
+	retro-collection-tool [global flags] curated convert --set done-set-3 --target nextui --source <path> --destination <path>
+
+Examples:
+	retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
+	retro-collection-tool --dry-run curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export`)
 	case "bios":
 		fmt.Println(`Usage:
 	retro-collection-tool [global flags] bios --systems <slug-or-alias[,slug-or-alias...]> [--strict]

@@ -90,6 +90,7 @@
             markdownlint-cli2
             ripgrep
             nodejs_22
+            p7zip
             shellcheck
             shfmt
             yamllint

@@ -89,6 +89,42 @@ Required flag:
 Example:
 `retro-collection-tool export --systems nes --destination /run/media/user/SDCARD/roms`
 
+## curated
+
+Converts pre-curated ROM packs into target firmware layouts.
+
+Currently supported:
+
+- `--set done-set-3`
+- `--target nextui`
+
+Required flags:
+
+- `--source <path>`: extracted Done Set 3 root containing `Roms/` and `BIOS/`
+- `--destination <path>`: export root where `Roms/` and `Bios/` will be created
+
+Behavior for Done Set 3 -> NextUI:
+
+- Cleans destination `Roms/` and `Bios/` first on every run to avoid duplicate carry-over from prior exports.
+- Writes only `Roms/` and `Bios/` into the destination root.
+- Also writes `Collections/` with franchise-focused collection lists.
+- Flattens ROM subfolders into each system folder for scroll-first browsing.
+- Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
+- Uses numbered release-order folder naming (for example `06) Nintendo Entertainment System (FC)`) so menu order is deterministic.
+- Merges `ARCADE`, `CPS3`, and `NEOGEO` sources into one `Arcade` destination folder.
+- For `MD`, routes `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` (with matching artwork in `Roms/10) Sega 32X (32X)/.media/`).
+- Copies `map.txt` into the Arcade folder when present in source arcade folders.
+- Converts `.7z` archives to `.zip` (keeps all other ROM file extensions unchanged).
+- For flatten-mode systems already predominantly using `.zip`, converts remaining raw single-file ROMs (for example `.gba`, `.smc`, `.sfc`) to `.zip` for folder uniformity.
+- Copies artwork from `Roms/<system>/Imgs/*.png` into `Roms/<system>/.media/*.png`.
+- Recursively copies BIOS from `BIOS/` to `Bios/`.
+- Preserves PlayStation `.hidden` content so `.m3u` playlists that reference `.hidden/...` continue to work while disc images stay hidden from normal browsing.
+- Preserves directory trees for `DOS`, `SCUMMVM`, and `PORTS` instead of flattening, which matches typical NextUI pak expectations for those systems.
+- Generates franchise collections such as Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, and Pokemon.
+
+Example:
+`retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export"`
+
 ## cache
 
 - `cache path`: print active cache path

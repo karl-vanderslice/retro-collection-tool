@@ -238,6 +238,23 @@ func TestPrintCommandUsageExport(t *testing.T) {
 	}
 }
 
+func TestPrintCommandUsageCurated(t *testing.T) {
+	t.Parallel()
+
+	out := captureStdoutForAppTest(t, func() {
+		if err := printCommandUsage("curated"); err != nil {
+			t.Fatalf("printCommandUsage: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "curated convert") {
+		t.Fatalf("expected curated usage line, got %q", out)
+	}
+	if !strings.Contains(out, "--set done-set-3") {
+		t.Fatalf("expected set guidance, got %q", out)
+	}
+}
+
 func TestPrintCommandUsageUnknownReturnsError(t *testing.T) {
 	t.Parallel()
 

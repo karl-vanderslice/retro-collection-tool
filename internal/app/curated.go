@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,13 @@ import (
 
 	"github.com/karl-vanderslice/retro-collection-tool/internal/fsutil"
 )
+
+// romGoodToolsTagRe matches GoodTools bracket flags like [!], [b], [a1] at the end of a name.
+var romGoodToolsTagRe = regexp.MustCompile(`\s*\[[^\]]{0,15}\]\s*$`)
+
+// romRegionRevTagRe matches common region and revision parentheticals at the end of a name,
+// e.g. (USA), (Europe), (Japan), (Rev A), (v1.1), (Beta), (Proto), (Demo), (En,Fr,De).
+var romRegionRevTagRe = regexp.MustCompile(`(?i)\s*\((?:USA|U\.S\.A\.|Europe|EUR|Eu|Japan|JPN|Jpn|World|UK|Australia|Aus|Brazil|BRA|Korea|KOR|China|Asia|Canada|France|Germany|Spain|Italy|Sweden|Netherlands|Denmark|Norway|Finland|En(?:,[A-Za-z,]+)?|Fr|De|Ja|Es|It|Pt|Nl|Ko|Zh|Sv|No|Da|Rev\.?\s*[A-Z0-9]+|v\d+\.\d+[^)]*|Beta[^)]*|Proto(?:type)?[^)]*|Demo[^)]*|Sample[^)]*|Unl|Unlicensed|Pirate|Kiosk|Virtual Console)\)\s*$`)
 
 var excludedROMFolders = map[string]bool{
 	"imgs":                true,
@@ -105,9 +113,13 @@ var collectionSpecs = []collectionSpec{
 	{Name: "Sonic the Hedgehog Series", Keywords: []string{"sonic", "knuckles", "tails", "dr. robotnik", "eggman"}},
 	{Name: "Golden Axe Series", Keywords: []string{"golden axe"}},
 	{Name: "Streets of Rage Series", Keywords: []string{"streets of rage", "bare knuckle"}},
+	{Name: "Final Fight Series", Keywords: []string{"final fight", "haggar", "mad gear"}},
 	{Name: "Phantasy Star Series", Keywords: []string{"phantasy star"}},
-	{Name: "Street Fighter Series", Keywords: []string{"street fighter", "sfii", "sfa", "alpha 3"}},
-	{Name: "Mortal Kombat Series", Keywords: []string{"mortal kombat"}},
+	{Name: "Street Fighter Series", Keywords: []string{"street fighter", "sfii", "sf zero", "alpha 3"}},
+	{Name: "Mortal Kombat Series", Keywords: []string{"mortal kombat", "mk trilogy", "mk mythologies"}},
+	{Name: "Pinball Games", Keywords: []string{"pinball", "alien crush", "devil's crush", "devil's crush", "dragon's fury", "sonic spinball"}},
+	{Name: "Card Games", Keywords: []string{"trading card", "card gb", "card game", "yu-gi-oh", "yugioh", "mahjong", "solitaire", "poker", "blackjack", "duelist", "duel academy"}},
+	{Name: "Beat \u2018Em Ups", Keywords: []string{"double dragon", "river city ransom", "kunio", "captain commando", "knights of the round", "battletoads", "turtles in time", "cadillacs and dinosaurs", "armored warriors", "avenger"}},
 	{Name: "King of Fighters Series", Keywords: []string{"king of fighters", "kof"}},
 	{Name: "Samurai Shodown Series", Keywords: []string{"samurai shodown", "samurai spirits"}},
 	{Name: "Metal Slug Series", Keywords: []string{"metal slug"}},
@@ -185,6 +197,8 @@ type curatedConvertStats struct {
 	Collections    int
 	CollectionROMs int
 	ArcadeMap      bool
+	MapTxtFiles    int
+	MapCollisions  int
 }
 
 func runCurated(g globalFlags, args []string) error {
@@ -263,6 +277,8 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"collections":       stats.Collections,
 		"collection_roms":   stats.CollectionROMs,
 		"arcade_map":        stats.ArcadeMap,
+		"map_txt_files":     stats.MapTxtFiles,
+		"map_collisions":    stats.MapCollisions,
 		"dry_run":           g.dryRun,
 	})
 
@@ -380,6 +396,13 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, g globalFlags
 		return stats, err
 	}
 	stats.ArcadeMap = hasArcadeMap
+
+	mapFiles, mapCollisions, err := generateAllSystemMapTxt(romsDstRoot, g)
+	if err != nil {
+		return stats, err
+	}
+	stats.MapTxtFiles = mapFiles
+	stats.MapCollisions = mapCollisions
 
 	biosCopied, err := copyDirectoryFiles(biosSrc, biosDstRoot, g)
 	if err != nil {
@@ -836,6 +859,174 @@ func normalizeFolderCategory(name string) string {
 		norm = strings.TrimSpace(norm[:idx])
 	}
 	return norm
+}
+
+// stripROMDisplayTags removes the file extension plus common trailing region, revision,
+// and GoodTools tags from a ROM filename to produce a clean display name.
+// Examples:
+//
+//	Metroid (USA).nes          -> Metroid
+//	Super Mario World (USA).sfc -> Super Mario World
+//	Sonic the Hedgehog [!].zip -> Sonic the Hedgehog
+//	Legend of Zelda, The (USA).zip -> The Legend of Zelda
+func stripROMDisplayTags(filename string) string {
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+	name = strings.TrimSpace(name)
+
+	// Iteratively strip GoodTools bracket flags: [!], [b], [a1], etc.
+	for {
+		trimmed := strings.TrimSpace(romGoodToolsTagRe.ReplaceAllString(name, ""))
+		if trimmed == name {
+			break
+		}
+		name = trimmed
+	}
+
+	// Iteratively strip known region/revision parens: (USA), (Rev A), (v1.1), etc.
+	for {
+		trimmed := strings.TrimSpace(romRegionRevTagRe.ReplaceAllString(name, ""))
+		if trimmed == name {
+			break
+		}
+		name = trimmed
+	}
+
+	// Handle ROM sorting convention "Title, The" -> "The Title".
+	if strings.HasSuffix(name, ", The") {
+		name = "The " + strings.TrimSuffix(name, ", The")
+	} else if strings.HasSuffix(name, ", A") {
+		name = "A " + strings.TrimSuffix(name, ", A")
+	} else if strings.HasSuffix(name, ", An") {
+		name = "An " + strings.TrimSuffix(name, ", An")
+	}
+
+	return strings.TrimSpace(name)
+}
+
+// systemKeyFromFolderName extracts the system key tag from a numbered folder name
+// like "06) Nintendo Entertainment System (FC)" -> "FC".
+func systemKeyFromFolderName(folderName string) string {
+	if !strings.HasSuffix(folderName, ")") {
+		return ""
+	}
+	start := strings.LastIndex(folderName, "(")
+	if start < 0 {
+		return ""
+	}
+	return strings.ToUpper(strings.TrimSpace(folderName[start+1 : len(folderName)-1]))
+}
+
+// generateSystemMapTxt writes a map.txt file into dstSystemDir mapping each ROM
+// filename to its clean display name (extension + region/revision tags stripped).
+// Returns the number of map files written and the number of display-name collisions found.
+func generateSystemMapTxt(dstSystemDir string, g globalFlags) (files int, collisions int, err error) {
+	entries, err := os.ReadDir(dstSystemDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+
+	type mapEntry struct {
+		filename    string
+		displayName string
+	}
+
+	var mapEntries []mapEntry
+	displayCount := make(map[string]int)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if excludedROMFilenames[strings.ToLower(strings.TrimSpace(name))] {
+			continue
+		}
+		if strings.EqualFold(name, "map.txt") {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(name))
+		if excludedROMFileExtensions[ext] {
+			continue
+		}
+
+		displayName := stripROMDisplayTags(name)
+		mapEntries = append(mapEntries, mapEntry{filename: name, displayName: displayName})
+		displayCount[strings.ToLower(displayName)]++
+	}
+
+	if len(mapEntries) == 0 {
+		return 0, 0, nil
+	}
+
+	for _, count := range displayCount {
+		if count > 1 {
+			collisions += count - 1
+		}
+	}
+
+	sort.Slice(mapEntries, func(i, j int) bool {
+		return mapEntries[i].filename < mapEntries[j].filename
+	})
+
+	if g.dryRun {
+		emitVerbose(g, "curated", "convert", "dry-run map.txt", outputFields{
+			"dir":        dstSystemDir,
+			"entries":    len(mapEntries),
+			"collisions": collisions,
+		})
+		return 1, collisions, nil
+	}
+
+	var b strings.Builder
+	for _, e := range mapEntries {
+		b.WriteString(e.filename)
+		b.WriteByte('|')
+		b.WriteString(e.displayName)
+		b.WriteByte('\n')
+	}
+
+	mapPath := filepath.Join(dstSystemDir, "map.txt")
+	if err := os.WriteFile(mapPath, []byte(b.String()), 0o644); err != nil {
+		return 0, collisions, err
+	}
+
+	return 1, collisions, nil
+}
+
+// generateAllSystemMapTxt scans all system folders under romsDstRoot and writes
+// a map.txt for each flat (non-tree-mode) system.
+func generateAllSystemMapTxt(romsDstRoot string, g globalFlags) (files int, collisions int, err error) {
+	systemDirs, err := os.ReadDir(romsDstRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+
+	for _, entry := range systemDirs {
+		if !entry.IsDir() {
+			continue
+		}
+		folderName := entry.Name()
+		systemKey := systemKeyFromFolderName(folderName)
+		if systemModes[strings.ToLower(systemKey)] == systemModeTree {
+			continue
+		}
+
+		systemDir := filepath.Join(romsDstRoot, folderName)
+		f, c, mapErr := generateSystemMapTxt(systemDir, g)
+		if mapErr != nil {
+			return files, collisions, mapErr
+		}
+		files += f
+		collisions += c
+	}
+
+	return files, collisions, nil
 }
 
 func ensureArcadeMap(romsSrc, romsDstRoot string, g globalFlags) (bool, error) {

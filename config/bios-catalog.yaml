@@ -300,6 +300,12 @@ entries:
     sources:
       - name: dsi_nand.bin
 
+  - system: nes
+    required: false
+    destination: disksys.rom
+    sources:
+      - name: disksys.rom
+
   - system: neo-geo-aes
     required: false
     destination: neogeo.zip
@@ -398,6 +404,18 @@ entries:
     destination: ryujinx/keys/prod.keys
     sources:
       - name: prod.keys
+
+  - system: supergrafx
+    required: false
+    destination: syscard3.pce
+    sources:
+      - name: syscard3.pce
+
+  - system: tg16
+    required: false
+    destination: syscard3.pce
+    sources:
+      - name: syscard3.pce
 
   - system: turbografx-cd
     required: false

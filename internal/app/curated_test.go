@@ -394,3 +394,212 @@ func assertFileMissing(t *testing.T, path string) {
 		t.Fatalf("expected not-exist for %s, got: %v", path, err)
 	}
 }
+
+func TestStripROMDisplayTags(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// Extension removal only.
+		{"Metroid.nes", "Metroid"},
+		{"Metroid.zip", "Metroid"},
+
+		// Region tag removal.
+		{"Metroid (USA).nes", "Metroid"},
+		{"Super Mario World (USA).sfc", "Super Mario World"},
+		{"Sonic the Hedgehog (Europe).zip", "Sonic the Hedgehog"},
+		{"Street Fighter II (Japan).sfc", "Street Fighter II"},
+		{"Final Fight (World).zip", "Final Fight"},
+
+		// Revision tags.
+		{"Mega Man 2 (USA) (Rev A).nes", "Mega Man 2"},
+		{"Mega Man 3 (USA) (Rev 1).nes", "Mega Man 3"},
+		{"Mega Man X (USA) (v1.1).sfc", "Mega Man X"},
+
+		// Special release tags.
+		{"Castlevania (USA) (Beta).nes", "Castlevania"},
+		{"Contra (USA) (Proto).nes", "Contra"},
+		{"Demo Game (USA) (Demo).nes", "Demo Game"},
+
+		// GoodTools bracket flags.
+		{"Sonic the Hedgehog [!].zip", "Sonic the Hedgehog"},
+		{"Bad Rom [b].zip", "Bad Rom"},
+		{"Alternate [a1].zip", "Alternate"},
+
+		// Combined tags (region + goodtools).
+		{"Legend of Zelda, The (USA) [!].nes", "The Legend of Zelda"},
+
+		// Article reattachment.
+		{"Legend of Zelda, The (USA).nes", "The Legend of Zelda"},
+		{"Hero, A (USA).nes", "A Hero"},
+		{"Oddity, An (USA).nes", "An Oddity"},
+
+		// Multi-language parens.
+		{"Game (En,Fr,De).zip", "Game"},
+
+		// No tags — should be unchanged besides extension.
+		{"Pokemon Red.gb", "Pokemon Red"},
+
+		// Edge case: name that ends with "), The" pattern inside parens (should not trigger article logic).
+		{"Pokemon Pinball (USA).gbc", "Pokemon Pinball"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+			got := stripROMDisplayTags(tc.in)
+			if got != tc.want {
+				t.Errorf("stripROMDisplayTags(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSystemKeyFromFolderName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"06) Nintendo Entertainment System (FC)", "FC"},
+		{"16) Game Boy Advance (GBA)", "GBA"},
+		{"27) MS-DOS (DOS)", "DOS"},
+		{"01) Arcade (ARCADE)", "ARCADE"},
+		{"No parens", ""},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+			got := systemKeyFromFolderName(tc.in)
+			if got != tc.want {
+				t.Errorf("systemKeyFromFolderName(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGenerateSystemMapTxt(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	g := globalFlags{}
+
+	mustWriteFile(t, filepath.Join(dir, "Metroid (USA).nes"), "rom")
+	mustWriteFile(t, filepath.Join(dir, "Mega Man 2 (USA).nes"), "rom")
+	mustWriteFile(t, filepath.Join(dir, "Legend of Zelda, The (USA) [!].nes"), "rom")
+	mustWriteFile(t, filepath.Join(dir, "Castlevania (USA).nes"), "rom")
+	// These should be excluded from map.txt.
+	mustWriteFile(t, filepath.Join(dir, "map.txt"), "old")
+	mustWriteFile(t, filepath.Join(dir, "thumbs.db"), "junk")
+
+	files, collisions, err := generateSystemMapTxt(dir, g)
+	if err != nil {
+		t.Fatalf("generateSystemMapTxt: %v", err)
+	}
+	if files != 1 {
+		t.Errorf("expected 1 map file written, got %d", files)
+	}
+	if collisions != 0 {
+		t.Errorf("expected 0 collisions, got %d", collisions)
+	}
+
+	mapPath := filepath.Join(dir, "map.txt")
+	assertFileExists(t, mapPath)
+
+	content, err := os.ReadFile(mapPath)
+	if err != nil {
+		t.Fatalf("reading map.txt: %v", err)
+	}
+	got := string(content)
+
+	// Each ROM should appear as "filename|display" — check key lines.
+	for _, line := range []string{
+		"Metroid (USA).nes|Metroid",
+		"Mega Man 2 (USA).nes|Mega Man 2",
+		"Legend of Zelda, The (USA) [!].nes|The Legend of Zelda",
+		"Castlevania (USA).nes|Castlevania",
+	} {
+		if !strings.Contains(got, line) {
+			t.Errorf("map.txt missing expected line %q\nfull content:\n%s", line, got)
+		}
+	}
+
+	// thumbs.db and the old map.txt must not appear as entries.
+	for _, bad := range []string{"thumbs.db|", "map.txt|"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("map.txt should not contain %q\nfull content:\n%s", bad, got)
+		}
+	}
+}
+
+func TestGenerateSystemMapTxtCollisions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	g := globalFlags{}
+
+	// Two ROMs that strip to the same display name.
+	mustWriteFile(t, filepath.Join(dir, "Game (USA).zip"), "rom")
+	mustWriteFile(t, filepath.Join(dir, "Game (Europe).zip"), "rom")
+	mustWriteFile(t, filepath.Join(dir, "Unique Title (USA).zip"), "rom")
+
+	_, collisions, err := generateSystemMapTxt(dir, g)
+	if err != nil {
+		t.Fatalf("generateSystemMapTxt: %v", err)
+	}
+	if collisions != 1 {
+		t.Errorf("expected 1 collision, got %d", collisions)
+	}
+}
+
+func TestGenerateSystemMapTxtDryRun(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	g := globalFlags{dryRun: true}
+
+	mustWriteFile(t, filepath.Join(dir, "Metroid (USA).nes"), "rom")
+
+	files, _, err := generateSystemMapTxt(dir, g)
+	if err != nil {
+		t.Fatalf("generateSystemMapTxt dry-run: %v", err)
+	}
+	if files != 1 {
+		t.Errorf("dry-run should still report 1 file, got %d", files)
+	}
+
+	// No actual map.txt should be written on dry-run.
+	assertFileMissing(t, filepath.Join(dir, "map.txt"))
+}
+
+func TestGenerateAllSystemMapTxtSkipsTreeMode(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	g := globalFlags{}
+
+	// Flat system: should get map.txt.
+	flatDir := filepath.Join(root, "16) Game Boy Advance (GBA)")
+	mustWriteFile(t, filepath.Join(flatDir, "Pokemon Red (USA).gba"), "rom")
+
+	// Tree-mode system: must be skipped.
+	dosDir := filepath.Join(root, "27) MS-DOS (DOS)")
+	mustWriteFile(t, filepath.Join(dosDir, "SomeGame", "GAME.EXE"), "exe")
+
+	files, _, err := generateAllSystemMapTxt(root, g)
+	if err != nil {
+		t.Fatalf("generateAllSystemMapTxt: %v", err)
+	}
+	if files != 1 {
+		t.Errorf("expected exactly 1 map.txt (GBA only), got %d", files)
+	}
+
+	assertFileExists(t, filepath.Join(flatDir, "map.txt"))
+	assertFileMissing(t, filepath.Join(dosDir, "map.txt"))
+}

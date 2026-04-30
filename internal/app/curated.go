@@ -194,6 +194,7 @@ type curatedConvertStats struct {
 	BIOSCopied     int
 	SevenZToZip    int
 	RawToZip       int
+	RezippedROMs   int
 	Collections    int
 	CollectionROMs int
 	ArcadeMap      bool
@@ -222,6 +223,8 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	target := fs.String("target", "nextui", "target firmware layout (currently supported: nextui)")
 	source := fs.String("source", "", "source root path containing Done Set 3 folders (Roms, BIOS)")
 	destination := fs.String("destination", "", "destination root path for export")
+	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
+	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -256,7 +259,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		return err
 	}
 
-	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, g)
+	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, *full, *permanent, g)
 	if err != nil {
 		return err
 	}
@@ -274,33 +277,53 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"bios_files_copied": stats.BIOSCopied,
 		"seven_z_to_zip":    stats.SevenZToZip,
 		"raw_to_zip":        stats.RawToZip,
+		"rezipped_roms":     stats.RezippedROMs,
 		"collections":       stats.Collections,
 		"collection_roms":   stats.CollectionROMs,
 		"arcade_map":        stats.ArcadeMap,
 		"map_txt_files":     stats.MapTxtFiles,
 		"map_collisions":    stats.MapCollisions,
-		"dry_run":           g.dryRun,
+		"mode": func() string {
+			base := "incremental"
+			if *full {
+				base = "full"
+			}
+			if *permanent {
+				return base + "+permanent"
+			}
+			return base
+		}(),
+		"dry_run": g.dryRun,
 	})
 
 	return nil
 }
 
-func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, g globalFlags) (curatedConvertStats, error) {
+func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permanent bool, g globalFlags) (curatedConvertStats, error) {
 	stats := curatedConvertStats{}
 
 	romsDstRoot := filepath.Join(destination, "Roms")
 	biosDstRoot := filepath.Join(destination, "Bios")
 
 	if g.dryRun {
-		emitInfo(g, "curated", "convert", "dry-run clean output roots", outputFields{"roms": romsDstRoot, "bios": biosDstRoot})
+		if full {
+			emitInfo(g, "curated", "convert", "dry-run clean output roots", outputFields{"roms": romsDstRoot, "bios": biosDstRoot})
+		}
 		emitInfo(g, "curated", "convert", "dry-run prepare output roots", outputFields{"roms": romsDstRoot, "bios": biosDstRoot})
-	} else {
+	} else if full {
 		if err := fsutil.RemoveIfExists(romsDstRoot); err != nil {
 			return stats, fmt.Errorf("clean ROM output root %s: %w", romsDstRoot, err)
 		}
 		if err := fsutil.RemoveIfExists(biosDstRoot); err != nil {
 			return stats, fmt.Errorf("clean BIOS output root %s: %w", biosDstRoot, err)
 		}
+		if err := fsutil.EnsureDir(romsDstRoot); err != nil {
+			return stats, err
+		}
+		if err := fsutil.EnsureDir(biosDstRoot); err != nil {
+			return stats, err
+		}
+	} else {
 		if err := fsutil.EnsureDir(romsDstRoot); err != nil {
 			return stats, err
 		}
@@ -362,25 +385,28 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, g globalFlags
 			}
 		}
 
-		rc, rd, zc, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, g)
+		rc, rd, zc, rz2, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, permanent, g)
 		if err != nil {
 			return stats, err
 		}
 		stats.ROMSCopied += rc
 		stats.ROMDuplicates += rd
 		stats.SevenZToZip += zc
+		stats.RezippedROMs += rz2
 
-		rz, err := normalizeSystemZipUniformity(dstSystemDir, systemMode, g)
-		if err != nil {
-			return stats, err
-		}
-		stats.RawToZip += rz
-		if dst32XSystemDir != "" {
-			rz32x, err := normalizeSystemZipUniformity(dst32XSystemDir, systemModeFlatten, g)
+		if !permanent {
+			rz, err := normalizeSystemZipUniformity(dstSystemDir, systemMode, g)
 			if err != nil {
 				return stats, err
 			}
-			stats.RawToZip += rz32x
+			stats.RawToZip += rz
+			if dst32XSystemDir != "" {
+				rz32x, err := normalizeSystemZipUniformity(dst32XSystemDir, systemModeFlatten, g)
+				if err != nil {
+					return stats, err
+				}
+				stats.RawToZip += rz32x
+			}
 		}
 
 		ac, ad, err := copySystemArtwork(systemName, srcSystemDir, dstMediaDir, dst32XMediaDir, g)
@@ -420,7 +446,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, g globalFlags
 	return stats, nil
 }
 
-func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, g globalFlags) (copied int, duplicates int, sevenZToZip int, err error) {
+func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permanent bool, g globalFlags) (copied int, duplicates int, sevenZToZip int, rezipped int, err error) {
 	if strings.TrimSpace(mode) == "" {
 		mode = systemModeFlatten
 	}
@@ -460,7 +486,7 @@ func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, g globa
 		}
 
 		dst := targetPathForROM(systemName, mode, dstSystemDir, rel, d.Name())
-		if ext == ".7z" {
+		if ext == ".7z" || (permanent && zipUniformExtensions[ext]) {
 			dst = strings.TrimSuffix(dst, filepath.Ext(dst)) + ".zip"
 		}
 
@@ -474,34 +500,65 @@ func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, g globa
 		}
 
 		if g.dryRun {
-			if ext == ".7z" {
+			switch {
+			case ext == ".7z":
 				emitVerbose(g, "curated", "convert", "dry-run 7z->zip", outputFields{"system": systemName, "from": path, "to": dst})
 				sevenZToZip++
 				copied++
-				return nil
+			case permanent && ext == ".zip":
+				emitVerbose(g, "curated", "convert", "dry-run rezip-max", outputFields{"system": systemName, "from": path, "to": dst})
+				rezipped++
+				copied++
+			case permanent && zipUniformExtensions[ext]:
+				emitVerbose(g, "curated", "convert", "dry-run raw->zip-max", outputFields{"system": systemName, "from": path, "to": dst})
+				rezipped++
+				copied++
+			default:
+				emitVerbose(g, "curated", "convert", "dry-run ROM copy", outputFields{"system": systemName, "from": path, "to": dst})
+				copied++
 			}
-			emitVerbose(g, "curated", "convert", "dry-run ROM copy", outputFields{"system": systemName, "from": path, "to": dst})
-			copied++
 			return nil
 		}
 
-		if ext == ".7z" {
-			if err := convert7zToZip(path, dst); err != nil {
+		switch {
+		case ext == ".7z":
+			level := 0
+			if permanent {
+				level = 9
+			}
+			if err := convert7zToZip(path, dst, level); err != nil {
 				return err
 			}
 			sevenZToZip++
 			copied++
-			return nil
+		case permanent && ext == ".zip":
+			if err := convert7zToZip(path, dst, 9); err != nil {
+				return err
+			}
+			rezipped++
+			copied++
+		case permanent && zipUniformExtensions[ext]:
+			if err := packRawROMToZip(path, dst, 9); err != nil {
+				return err
+			}
+			rezipped++
+			copied++
+		default:
+			if permanent {
+				if err := fsutil.CopyFile(path, dst); err != nil {
+					return err
+				}
+			} else {
+				if err := fsutil.LinkOrCopy(path, dst); err != nil {
+					return err
+				}
+			}
+			copied++
 		}
-
-		if err := fsutil.CopyFile(path, dst); err != nil {
-			return err
-		}
-		copied++
 		return nil
 	})
 
-	return copied, duplicates, sevenZToZip, err
+	return copied, duplicates, sevenZToZip, rezipped, err
 }
 
 func targetPathForROM(systemName, mode, dstSystemDir, rel, basename string) string {
@@ -554,7 +611,7 @@ func resolveSystemMode(systemName string) string {
 	return systemModeFlatten
 }
 
-func convert7zToZip(src7zPath, dstZipPath string) error {
+func convert7zToZip(src7zPath, dstZipPath string, level int) error {
 	if _, err := exec.LookPath("7z"); err != nil {
 		return fmt.Errorf("7z not found in PATH for conversion (%s): %w", src7zPath, err)
 	}
@@ -584,7 +641,7 @@ func convert7zToZip(src7zPath, dstZipPath string) error {
 		return fmt.Errorf("7z archive %s extracted no files", src7zPath)
 	}
 
-	args := []string{"a", "-tzip", "-mx=0", dstZipPath}
+	args := []string{"a", "-tzip", fmt.Sprintf("-mx=%d", level), dstZipPath}
 	for _, entry := range entries {
 		args = append(args, entry.Name())
 	}
@@ -593,6 +650,28 @@ func convert7zToZip(src7zPath, dstZipPath string) error {
 	repack.Dir = workDir
 	if out, err := repack.CombinedOutput(); err != nil {
 		return fmt.Errorf("pack zip %s from %s: %w: %s", dstZipPath, src7zPath, err, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// packRawROMToZip packs a single raw ROM file into a new zip at dstZipPath using the
+// given compression level (0=store, 9=max). Unlike zipSingleFile, it reads from an
+// arbitrary srcPath and does not delete the source file.
+func packRawROMToZip(srcPath, dstZipPath string, level int) error {
+	if _, err := exec.LookPath("7z"); err != nil {
+		return fmt.Errorf("7z not found in PATH for zip packing (%s): %w", srcPath, err)
+	}
+
+	if err := fsutil.EnsureDir(filepath.Dir(dstZipPath)); err != nil {
+		return err
+	}
+
+	args := []string{"a", "-tzip", fmt.Sprintf("-mx=%d", level), dstZipPath, filepath.Base(srcPath)}
+	pack := exec.Command("7z", args...)
+	pack.Dir = filepath.Dir(srcPath)
+	if out, err := pack.CombinedOutput(); err != nil {
+		return fmt.Errorf("zip %s to %s: %w: %s", srcPath, dstZipPath, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -631,6 +710,9 @@ func normalizeSystemZipUniformity(dstSystemDir, mode string, g globalFlags) (int
 
 	entries, err := os.ReadDir(dstSystemDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
 		return 0, err
 	}
 
@@ -791,6 +873,14 @@ func copyDirectoryFiles(srcRoot, dstRoot string, g globalFlags) (int, error) {
 				return nil
 			}
 			return fsutil.EnsureDir(dst)
+		}
+
+		exists, existsErr := fileExistsAt(dst)
+		if existsErr != nil {
+			return existsErr
+		}
+		if exists {
+			return nil
 		}
 
 		if g.dryRun {
@@ -1121,6 +1211,9 @@ func collectROMEntries(destination string) ([]collectionEntry, error) {
 
 	err := filepath.WalkDir(romsRoot, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
 			return walkErr
 		}
 

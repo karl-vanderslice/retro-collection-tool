@@ -189,6 +189,7 @@ type curatedConvertStats struct {
 	Systems        int
 	ROMSCopied     int
 	ROMDuplicates  int
+	CorruptROMs    int
 	ArtCopied      int
 	ArtDuplicates  int
 	BIOSCopied     int
@@ -278,6 +279,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"seven_z_to_zip":    stats.SevenZToZip,
 		"raw_to_zip":        stats.RawToZip,
 		"rezipped_roms":     stats.RezippedROMs,
+		"corrupt_roms":      stats.CorruptROMs,
 		"collections":       stats.Collections,
 		"collection_roms":   stats.CollectionROMs,
 		"arcade_map":        stats.ArcadeMap,
@@ -385,7 +387,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 			}
 		}
 
-		rc, rd, zc, rz2, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, permanent, g)
+		rc, rd, zc, rz2, sk, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, permanent, g)
 		if err != nil {
 			return stats, err
 		}
@@ -393,6 +395,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 		stats.ROMDuplicates += rd
 		stats.SevenZToZip += zc
 		stats.RezippedROMs += rz2
+		stats.CorruptROMs += sk
 
 		if !permanent {
 			rz, err := normalizeSystemZipUniformity(dstSystemDir, systemMode, g)
@@ -446,7 +449,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 	return stats, nil
 }
 
-func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permanent bool, g globalFlags) (copied int, duplicates int, sevenZToZip int, rezipped int, err error) {
+func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permanent bool, g globalFlags) (copied int, duplicates int, sevenZToZip int, rezipped int, skipped int, err error) {
 	if strings.TrimSpace(mode) == "" {
 		mode = systemModeFlatten
 	}
@@ -527,13 +530,17 @@ func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permane
 				level = 9
 			}
 			if err := convert7zToZip(path, dst, level); err != nil {
-				return err
+				emitInfo(g, "curated", "convert", "skipping corrupt archive", outputFields{"system": systemName, "path": path, "error": err.Error()})
+				skipped++
+				return nil
 			}
 			sevenZToZip++
 			copied++
 		case permanent && ext == ".zip":
 			if err := convert7zToZip(path, dst, 9); err != nil {
-				return err
+				emitInfo(g, "curated", "convert", "skipping corrupt archive", outputFields{"system": systemName, "path": path, "error": err.Error()})
+				skipped++
+				return nil
 			}
 			rezipped++
 			copied++
@@ -558,7 +565,7 @@ func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permane
 		return nil
 	})
 
-	return copied, duplicates, sevenZToZip, rezipped, err
+	return copied, duplicates, sevenZToZip, rezipped, skipped, err
 }
 
 func targetPathForROM(systemName, mode, dstSystemDir, rel, basename string) string {

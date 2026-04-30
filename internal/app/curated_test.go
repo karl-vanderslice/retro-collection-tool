@@ -29,7 +29,7 @@ func TestCopySystemROMsFlattenSkipsManualsAndImgs(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Manuals", "manual.pdf"), "doc")
 	mustWriteFile(t, filepath.Join(src, "Imgs", "root-game.png"), "art")
 
-	copied, duplicates, converted, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCopySystemROMsFlattenSkipsPuristCategories(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Translations (MD)", "Translation One.zip"), "translation")
 	mustWriteFile(t, filepath.Join(src, "Unlicensed Homebrew (MD)", "Homebrew One.zip"), "homebrew")
 
-	copied, duplicates, converted, _, err := copySystemROMs("MD", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs purist categories: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCopySystemROMsMDRoutes32XToDedicatedFolder(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "32X Games (Genesis)", "Doom.zip"), "rom")
 	mustWriteFile(t, filepath.Join(src, "All but the Best (Genesis)", "Sonic.zip"), "rom")
 
-	copied, duplicates, converted, _, err := copySystemROMs("MD", src, mdDst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, mdDst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs md 32x route: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestCopySystemROMsTreePreservesSubdirsForScummVM(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Game One", "data.001"), "bin")
 	mustWriteFile(t, filepath.Join(src, "Imgs", "cover.png"), "art")
 
-	copied, duplicates, converted, _, err := copySystemROMs("SCUMMVM", src, dst, systemModeTree, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("SCUMMVM", src, dst, systemModeTree, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs tree: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestCopySystemROMsFlattenPreservesHiddenDiscFiles(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, ".hidden", "Disc 1.chd"), "chd")
 	mustWriteFile(t, filepath.Join(src, "Game.m3u"), ".hidden/Disc 1.chd\n")
 
-	copied, duplicates, converted, _, err := copySystemROMs("PS", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("PS", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs flatten hidden: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestCopySystemROMsArcadePreservesCHDRelativePath(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "kinst", "kinst.chd"), "chd")
 	mustWriteFile(t, filepath.Join(src, "kinst.zip"), "zip")
 
-	copied, duplicates, converted, _, err := copySystemROMs("ARCADE", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("ARCADE", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs arcade chd: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestCopySystemROMsDryRunCounts7zConversion(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(src, "pack.7z"), "placeholder")
 
-	copied, duplicates, converted, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{dryRun: true})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{dryRun: true})
 	if err != nil {
 		t.Fatalf("copySystemROMs dry-run 7z: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestCopySystemROMsFlattenSkipsCFGSidecar(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Game.tap"), "rom")
 	mustWriteFile(t, filepath.Join(src, "Game.tap.p2k.cfg"), "cfg")
 
-	copied, duplicates, converted, _, err := copySystemROMs("ZXS", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("ZXS", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs flatten cfg: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestCopySystemROMsSkipsCommonCruftFiles(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "desktop.ini"), "junk")
 	mustWriteFile(t, filepath.Join(src, "__MACOSX", "artifact.bin"), "junk")
 
-	copied, duplicates, converted, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs cruft: %v", err)
 	}

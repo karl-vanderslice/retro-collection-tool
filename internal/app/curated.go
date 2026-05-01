@@ -50,7 +50,7 @@ type systemMenuSpec struct {
 }
 
 var systemMenuSpecs = map[string]systemMenuSpec{
-	"ARCADE":              {Order: 0, Title: "Arcade", Tag: "ARCADE"},
+	"ARCADE":              {Order: 0, Title: "Arcade", Tag: "FBN"},
 	"ATARI":               {Order: 1, Title: "Atari 2600", Tag: "ATARI"},
 	"FIFTYTWOHUNDRED":     {Order: 2, Title: "Atari 5200", Tag: "FIFTYTWOHUNDRED"},
 	"SEVENTYEIGHTHUNDRED": {Order: 3, Title: "Atari 7800", Tag: "SEVENTYEIGHTHUNDRED"},
@@ -226,7 +226,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	destination := fs.String("destination", "", "destination root path for export")
 	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
-	excludeSystems := fs.String("exclude-systems", "", "comma-separated list of system tags to exclude (e.g. ATARI,COLECO,VECTREX)")
+	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -945,7 +945,7 @@ func nextUISystemFolderName(system string) string {
 func canonicalDestinationSystemKey(systemName string) string {
 	key := strings.ToUpper(strings.TrimSpace(systemName))
 	switch key {
-	case "CPS3", "NEOGEO":
+	case "CPS3", "NEOGEO", "MAME", "FBNEO", "FB NEO", "FB-NEO":
 		return "ARCADE"
 	default:
 		return key
@@ -1151,6 +1151,8 @@ func ensureArcadeMap(romsSrc, romsDstRoot string, g globalFlags) (bool, error) {
 	arcadeDst := filepath.Join(romsDstRoot, nextUISystemFolderName("ARCADE"), "map.txt")
 	candidates := []string{
 		filepath.Join(romsSrc, "ARCADE", "map.txt"),
+		filepath.Join(romsSrc, "MAME", "map.txt"),
+		filepath.Join(romsSrc, "FBNeo", "map.txt"),
 		filepath.Join(romsSrc, "NEOGEO", "map.txt"),
 		filepath.Join(romsSrc, "CPS3", "map.txt"),
 	}

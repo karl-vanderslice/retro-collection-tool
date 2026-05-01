@@ -111,7 +111,7 @@ Behavior for Done Set 3 -> NextUI:
 - Flattens ROM subfolders into each system folder for scroll-first browsing.
 - Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
 - Uses numbered release-order folder naming (for example `06) Nintendo Entertainment System (FC)`) so menu order is deterministic.
-- Merges `ARCADE`, `CPS3`, and `NEOGEO` sources into one `Arcade` destination folder.
+- Merges `ARCADE`, `MAME`, `FBNeo`, `CPS3`, and `NEOGEO` sources into one `Arcade` destination folder.
 - For `MD`, routes `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` (with matching artwork in `Roms/10) Sega 32X (32X)/.media/`).
 - Copies `map.txt` into the Arcade folder when present in source arcade folders.
 - Converts `.7z` archives to `.zip` (keeps all other ROM file extensions unchanged).

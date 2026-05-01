@@ -93,13 +93,14 @@ The Nix dev shell provides pinned arcade tooling via `flake.lock`, including `ig
 - `just build`
 - `just docs-serve`
 
-## CI and docs publishing
+## Quality and docs publishing
 
-GitHub Actions runs on push to `master`:
+Run quality checks locally through the repo entrypoints:
 
-1. Format check (`just fmt` + clean diff).
-2. Lint (`just lint`).
-3. Tests (`just test`).
-4. Build (`just build`).
+1. `just fmt`
+2. `just lint`
+3. `just test`
+4. `just build`
 
-If all steps pass, CI builds MkDocs and deploys to GitHub Pages.
+Documentation for this repository is published through the centralized
+`docs.vslice.net` hub workflow.

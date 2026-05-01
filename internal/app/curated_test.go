@@ -316,7 +316,7 @@ func TestConvertDoneSet3ToNextUICreatesRomsBiosAndMedia(t *testing.T) {
 	mustWriteFile(t, filepath.Join(romsSrc, "FC", "Imgs", "Game 1.png"), "art1")
 	mustWriteFile(t, filepath.Join(biosSrc, "PS", "scph5501.bin"), "bios")
 
-	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, destination, false, false, globalFlags{})
+	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, destination, false, false, nil, globalFlags{})
 	if err != nil {
 		t.Fatalf("convertDoneSet3ToNextUI: %v", err)
 	}

@@ -226,6 +226,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	destination := fs.String("destination", "", "destination root path for export")
 	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
+	excludeSystems := fs.String("exclude-systems", "", "comma-separated list of system tags to exclude (e.g. ATARI,COLECO,VECTREX)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -260,7 +261,9 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		return err
 	}
 
-	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, *full, *permanent, g)
+	excludeMap := parseExcludeSystemsFlag(*excludeSystems)
+
+	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, *full, *permanent, excludeMap, g)
 	if err != nil {
 		return err
 	}
@@ -301,7 +304,21 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	return nil
 }
 
-func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permanent bool, g globalFlags) (curatedConvertStats, error) {
+func parseExcludeSystemsFlag(raw string) map[string]bool {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	m := make(map[string]bool)
+	for _, tag := range strings.Split(raw, ",") {
+		t := strings.ToUpper(strings.TrimSpace(tag))
+		if t != "" {
+			m[t] = true
+		}
+	}
+	return m
+}
+
+func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permanent bool, excludeSystems map[string]bool, g globalFlags) (curatedConvertStats, error) {
 	stats := curatedConvertStats{}
 
 	romsDstRoot := filepath.Join(destination, "Roms")
@@ -350,9 +367,13 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 			continue
 		}
 
+		dstKey := canonicalDestinationSystemKey(systemName)
+		if excludeSystems[dstKey] {
+			continue
+		}
+
 		stats.Systems++
 		srcSystemDir := filepath.Join(romsSrc, systemName)
-		dstKey := canonicalDestinationSystemKey(systemName)
 		dstSystemDir := filepath.Join(romsDstRoot, nextUISystemFolderName(dstKey))
 		dstMediaDir := filepath.Join(dstSystemDir, ".media")
 		dst32XSystemDir := md32XDestinationDir(romsDstRoot)

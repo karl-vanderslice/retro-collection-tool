@@ -171,11 +171,33 @@ func extractNextUIRelease(zipPath, destination string, logf func(string, ...any)
 	logf("nextui: extracting %s → %s (strip prefix: %q)", zipPath, destination, stripPrefix)
 
 	for _, f := range r.File {
+		// Skip directories that our tool manages so the ZIP's stock
+		// placeholder folders don't pollute the destination alongside
+		// the numbered directories we create.
+		if isNextUIManagedDir(f.Name, stripPrefix) {
+			continue
+		}
 		if err := extractZipEntry(f, destination, stripPrefix); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// isNextUIManagedDir reports whether a zip entry belongs to a directory that
+// our tool manages (Roms/, Bios/). Those directories must not be extracted from
+// the release ZIP because the stock placeholder folders conflict with the
+// numbered directories this tool creates.
+func isNextUIManagedDir(entryName, stripPrefix string) bool {
+	name := filepath.ToSlash(entryName)
+	name = strings.TrimPrefix(name, stripPrefix)
+	// Managed top-level dirs: match "Roms", "Roms/...", "Bios", "Bios/..."
+	for _, managed := range []string{"Roms", "Bios"} {
+		if name == managed || strings.HasPrefix(name, managed+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // detectZipStripPrefix returns the common top-level directory prefix to strip

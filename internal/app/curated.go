@@ -227,6 +227,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
 	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
+	nextUIRelease := fs.String("nextui-release", "", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; the downloaded zip is cached in the OS user cache directory`)
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -262,6 +263,26 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	}
 
 	excludeMap := parseExcludeSystemsFlag(*excludeSystems)
+
+	if releaseTag := strings.TrimSpace(*nextUIRelease); releaseTag != "" {
+		cacheDir, err := nextUIDefaultCacheDir()
+		if err != nil {
+			return err
+		}
+		logf := func(format string, a ...any) {
+			emitInfo(g, "curated", "convert", fmt.Sprintf(format, a...), nil)
+		}
+		zipPath, resolvedTag, err := downloadNextUIRelease(releaseTag, cacheDir, logf)
+		if err != nil {
+			return fmt.Errorf("nextui release download: %w", err)
+		}
+		logf("nextui release %s: extracting to %s", resolvedTag, dstRoot)
+		if !g.dryRun {
+			if err := extractNextUIRelease(zipPath, dstRoot, logf); err != nil {
+				return fmt.Errorf("nextui release extract: %w", err)
+			}
+		}
+	}
 
 	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, *full, *permanent, excludeMap, g)
 	if err != nil {

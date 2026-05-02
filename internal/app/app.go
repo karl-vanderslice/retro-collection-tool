@@ -85,49 +85,12 @@ func Run(args []string) error {
 		return errors.New("no command provided")
 	}
 
-	configPaths, err := resolveConfigPaths(globals.configPath)
-	if err != nil {
-		return err
-	}
-
-	cfg, err := config.LoadMerged(configPaths, config.EnvOverrides{Root: strings.TrimSpace(os.Getenv(rootEnvVar))})
-	if err != nil {
-		return fmt.Errorf("load config layers %v: %w", configPaths, err)
-	}
-	if globals.verbose {
-		emitInfo(globals, "config", "", "merged layers", outputFields{"layers": strings.Join(configPaths, " -> ")})
-		if strings.TrimSpace(os.Getenv(rootEnvVar)) != "" {
-			emitInfo(globals, "config", "", "root override active", outputFields{"env": rootEnvVar})
-		}
-	}
-
-	ctx := context.Background()
 	command := rest[0]
-	runner := igir.NewRunner(cfg)
 
+	// Dispatch commands that do not require config before loading it.
 	switch command {
-	case "sync":
-		return runSync(ctx, cfg, runner, globals, rest[1:])
-	case "hacks":
-		return runHacks(ctx, cfg, globals, rest[1:])
 	case "curated":
 		return runCurated(globals, rest[1:])
-	case "bios":
-		return runBios(cfg, globals, rest[1:])
-	case "redump":
-		return runRedumpStub(cfg)
-	case "arcade":
-		return runArcade(ctx, cfg, runner, globals, rest[1:])
-	case "cache":
-		return runCache(cfg, globals, rest[1:])
-	case "clean":
-		return runClean(cfg, globals, rest[1:])
-	case "export":
-		return runExport(cfg, globals, rest[1:])
-	case "bootstrap":
-		return runBootstrap(cfg, globals)
-	case "systems":
-		return runSystems(cfg, globals)
 	case "version":
 		if globals.isJSONOutput() {
 			emitInfo(globals, "version", "", "version", outputFields{"value": "retro-collection-tool dev"})
@@ -145,6 +108,48 @@ func Run(args []string) error {
 		}
 		printRootUsage()
 		return nil
+	}
+
+	configPaths, err := resolveConfigPaths(globals.configPath)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.LoadMerged(configPaths, config.EnvOverrides{Root: strings.TrimSpace(os.Getenv(rootEnvVar))})
+	if err != nil {
+		return fmt.Errorf("load config layers %v: %w", configPaths, err)
+	}
+	if globals.verbose {
+		emitInfo(globals, "config", "", "merged layers", outputFields{"layers": strings.Join(configPaths, " -> ")})
+		if strings.TrimSpace(os.Getenv(rootEnvVar)) != "" {
+			emitInfo(globals, "config", "", "root override active", outputFields{"env": rootEnvVar})
+		}
+	}
+
+	ctx := context.Background()
+	runner := igir.NewRunner(cfg)
+
+	switch command {
+	case "sync":
+		return runSync(ctx, cfg, runner, globals, rest[1:])
+	case "hacks":
+		return runHacks(ctx, cfg, globals, rest[1:])
+	case "bios":
+		return runBios(cfg, globals, rest[1:])
+	case "redump":
+		return runRedumpStub(cfg)
+	case "arcade":
+		return runArcade(ctx, cfg, runner, globals, rest[1:])
+	case "cache":
+		return runCache(cfg, globals, rest[1:])
+	case "clean":
+		return runClean(cfg, globals, rest[1:])
+	case "export":
+		return runExport(cfg, globals, rest[1:])
+	case "bootstrap":
+		return runBootstrap(cfg, globals)
+	case "systems":
+		return runSystems(cfg, globals)
 	default:
 		printRootUsage()
 		return unknownCommandError(command)

@@ -228,6 +228,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
 	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
 	nextUIRelease := fs.String("nextui-release", "", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; the downloaded zip is cached in the OS user cache directory`)
+	device := fs.String("device", "", `target device for autorun icon placement (supported: trimui-brick); copies the device icon and autorun.inf to the destination root`)
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -287,6 +288,17 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	stats, err := convertDoneSet3ToNextUI(romsSrc, biosSrc, dstRoot, *full, *permanent, excludeMap, g)
 	if err != nil {
 		return err
+	}
+
+	if deviceName := strings.TrimSpace(*device); deviceName != "" {
+		logf := func(format string, a ...any) {
+			emitInfo(g, "curated", "convert", fmt.Sprintf(format, a...), nil)
+		}
+		if !g.dryRun {
+			if err := applyDeviceAssets(dstRoot, deviceName, logf); err != nil {
+				return fmt.Errorf("device assets: %w", err)
+			}
+		}
 	}
 
 	emitInfo(g, "curated", "convert", "summary", outputFields{

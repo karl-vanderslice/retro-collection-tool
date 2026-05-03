@@ -15,15 +15,18 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 - Imports BIOS files from configured source roots using catalog matching and optional hash verification.
 - Exports selected systems to an external destination (for example, SD card media).
 - Converts pre-curated set layouts (Done Set 3) into NextUI-ready `Roms` + `Bios` structure with flattened ROM folders and copied artwork.
+  - Validates source system folder names against known NextUI emulator tags before conversion.
   - Rebuilds destination `Roms/` and `Bios/` from scratch on each run (clean-first) to avoid duplicate carry-over.
   - Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
   - Applies release-order numbered system folders (for example `06) Nintendo Entertainment System (FC)`).
-  - Uses a single Arcade destination by merging `ARCADE`, `CPS3`, and `NEOGEO` sources.
+  - Uses a single Arcade destination by merging `ARCADE`, `MAME`, `FBNeo`, `CPS3`, and `NEOGEO` sources.
+  - Prefers FBNeo `map.txt` metadata for arcade display names and filters merged arcade ROMs to names present in the selected arcade map set when available.
   - Splits `MD` `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` with artwork routed to `Roms/10) Sega 32X (32X)/.media/`.
-  - Copies `map.txt` to the Arcade folder when present in source folders.
+  - Copies `map.txt` to the Arcade folder when present in source folders and emits tab-delimited `map.txt` files for NextUI compatibility.
   - `.7z` ROM archives are converted to `.zip` for NextUI compatibility.
   - PlayStation `.m3u` + `.hidden` multi-disc layouts are preserved.
-  - `DOS`, `SCUMMVM`, and `PORTS` retain folder trees instead of flattening.
+  - `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` retain folder trees instead of flattening.
+  - Copies `.cht` cheat files from `Cheats/<system>/` into `Cheats/<NextUI_TAG>/`.
   - Auto-generates `Collections/*.txt` for major series (Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, Pokemon).
 
 ## Quick start

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -168,6 +169,8 @@ var systemModes = map[string]string{
 	"dos":     systemModeTree,
 	"scummvm": systemModeTree,
 	"ports":   systemModeTree,
+	"segacd":  systemModeTree,
+	"pcecd":   systemModeTree,
 }
 
 var zipUniformExtensions = map[string]bool{
@@ -190,6 +193,7 @@ type curatedConvertStats struct {
 	ROMSCopied     int
 	ROMDuplicates  int
 	CorruptROMs    int
+	CheatsCopied   int
 	ArtCopied      int
 	ArtDuplicates  int
 	BIOSCopied     int
@@ -227,6 +231,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
 	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
+	allowUnmappedSystems := fs.Bool("allow-unmapped-systems", false, "continue conversion when source system folders do not map to known NextUI tags (unknown systems are skipped)")
 	nextUIRelease := fs.String("nextui-release", "", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; the downloaded zip is cached in the OS user cache directory`)
 	device := fs.String("device", "", `target device for autorun icon placement (supported: trimui-brick); copies the device icon and autorun.inf to the destination root`)
 
@@ -264,6 +269,9 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	}
 
 	excludeMap := parseExcludeSystemsFlag(*excludeSystems)
+	if err := validateCuratedSourceSystemMappings(romsSrc, excludeMap, *allowUnmappedSystems); err != nil {
+		return err
+	}
 
 	if releaseTag := strings.TrimSpace(*nextUIRelease); releaseTag != "" {
 		cacheDir, err := nextUIDefaultCacheDir()
@@ -282,6 +290,9 @@ func runCuratedConvert(g globalFlags, args []string) error {
 			if err := extractNextUIRelease(zipPath, dstRoot, logf); err != nil {
 				return fmt.Errorf("nextui release extract: %w", err)
 			}
+			if err := validateNextUIExtractedRoot(dstRoot); err != nil {
+				return fmt.Errorf("nextui release validate: %w", err)
+			}
 		}
 	}
 
@@ -289,6 +300,11 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	if err != nil {
 		return err
 	}
+	cheatsCopied, err := copyCuratedCheats(filepath.Join(srcRoot, "Cheats"), dstRoot, excludeMap, *allowUnmappedSystems, g)
+	if err != nil {
+		return err
+	}
+	stats.CheatsCopied = cheatsCopied
 
 	if deviceName := strings.TrimSpace(*device); deviceName != "" {
 		logf := func(format string, a ...any) {
@@ -316,6 +332,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"raw_to_zip":        stats.RawToZip,
 		"rezipped_roms":     stats.RezippedROMs,
 		"corrupt_roms":      stats.CorruptROMs,
+		"cheats_copied":     stats.CheatsCopied,
 		"collections":       stats.Collections,
 		"collection_roms":   stats.CollectionROMs,
 		"arcade_map":        stats.ArcadeMap,
@@ -353,6 +370,10 @@ func parseExcludeSystemsFlag(raw string) map[string]bool {
 
 func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permanent bool, excludeSystems map[string]bool, g globalFlags) (curatedConvertStats, error) {
 	stats := curatedConvertStats{}
+	arcadeAllowed, arcadeDisplayNames, _, err := loadArcadeMapHints(romsSrc)
+	if err != nil {
+		return stats, err
+	}
 
 	romsDstRoot := filepath.Join(destination, "Roms")
 	biosDstRoot := filepath.Join(destination, "Bios")
@@ -400,7 +421,11 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 			continue
 		}
 
-		dstKey := canonicalDestinationSystemKey(systemName)
+		dstKey, known := resolveDestinationSystemKey(systemName)
+		if !known {
+			emitInfo(g, "curated", "convert", "skipping unmapped source system", outputFields{"system": systemName})
+			continue
+		}
 		if excludeSystems[dstKey] {
 			continue
 		}
@@ -441,7 +466,11 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 			}
 		}
 
-		rc, rd, zc, rz2, sk, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, permanent, g)
+		copyOpts := systemCopyOptions{}
+		if dstKey == "ARCADE" {
+			copyOpts.arcadeAllowed = arcadeAllowed
+		}
+		rc, rd, zc, rz2, sk, err := copySystemROMs(systemName, srcSystemDir, dstSystemDir, systemMode, permanent, copyOpts, g)
 		if err != nil {
 			return stats, err
 		}
@@ -480,7 +509,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 	}
 	stats.ArcadeMap = hasArcadeMap
 
-	mapFiles, mapCollisions, err := generateAllSystemMapTxt(romsDstRoot, g)
+	mapFiles, mapCollisions, err := generateAllSystemMapTxt(romsDstRoot, arcadeDisplayNames, g)
 	if err != nil {
 		return stats, err
 	}
@@ -503,7 +532,11 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 	return stats, nil
 }
 
-func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permanent bool, g globalFlags) (copied int, duplicates int, sevenZToZip int, rezipped int, skipped int, err error) {
+type systemCopyOptions struct {
+	arcadeAllowed map[string]bool
+}
+
+func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permanent bool, opts systemCopyOptions, g globalFlags) (copied int, duplicates int, sevenZToZip int, rezipped int, skipped int, err error) {
 	if strings.TrimSpace(mode) == "" {
 		mode = systemModeFlatten
 	}
@@ -543,6 +576,9 @@ func copySystemROMs(systemName, srcSystemDir, dstSystemDir, mode string, permane
 		}
 
 		dst := targetPathForROM(systemName, mode, dstSystemDir, rel, d.Name())
+		if !allowArcadeROMPath(systemName, rel, d.Name(), opts.arcadeAllowed) {
+			return nil
+		}
 		if ext == ".7z" || (permanent && zipUniformExtensions[ext]) {
 			dst = strings.TrimSuffix(dst, filepath.Ext(dst)) + ".zip"
 		}
@@ -976,13 +1012,224 @@ func nextUISystemFolderName(system string) string {
 }
 
 func canonicalDestinationSystemKey(systemName string) string {
-	key := strings.ToUpper(strings.TrimSpace(systemName))
-	switch key {
-	case "CPS3", "NEOGEO", "MAME", "FBNEO", "FB NEO", "FB-NEO":
-		return "ARCADE"
-	default:
+	if key, ok := resolveDestinationSystemKey(systemName); ok {
 		return key
 	}
+	return strings.ToUpper(strings.TrimSpace(systemName))
+}
+
+var sourceToNextUISystemAliases = map[string]string{
+	"ARCADE":       "ARCADE",
+	"CPS1":         "ARCADE",
+	"CPS2":         "ARCADE",
+	"CPS3":         "ARCADE",
+	"FBA":          "ARCADE",
+	"FBNEO":        "ARCADE",
+	"FINALBURNNEO": "ARCADE",
+	"MAME":         "ARCADE",
+	"NEOGEO":       "ARCADE",
+	"NES":          "FC",
+	"FAMICOM":      "FC",
+	"SNES":         "SFC",
+	"SUPERFAMICOM": "SFC",
+	"GENESIS":      "MD",
+	"MEGADRIVE":    "MD",
+	"SEGAGENESIS":  "MD",
+	"SEGACD":       "SEGACD",
+	"MEGACD":       "SEGACD",
+	"SCD":          "SEGACD",
+	"MCD":          "SEGACD",
+	"PSX":          "PS",
+	"PS1":          "PS",
+	"PLAYSTATION":  "PS",
+	"TG16":         "PCE",
+	"TURBOGRAFX16": "PCE",
+	"PCE":          "PCE",
+	"PCECD":        "PCECD",
+	"TGCD":         "PCECD",
+	"TURBOGRAFXCD": "PCECD",
+}
+
+func resolveDestinationSystemKey(systemName string) (string, bool) {
+	normalized := normalizeSystemAlias(systemName)
+	if normalized == "" {
+		return "", false
+	}
+	if dst, ok := sourceToNextUISystemAliases[normalized]; ok {
+		return dst, true
+	}
+	for key := range systemMenuSpecs {
+		if normalizeSystemAlias(key) == normalized {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+func normalizeSystemAlias(v string) string {
+	up := strings.ToUpper(strings.TrimSpace(v))
+	if up == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range up {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func validateCuratedSourceSystemMappings(romsSrc string, excludeSystems map[string]bool, allowUnmapped bool) error {
+	entries, err := os.ReadDir(romsSrc)
+	if err != nil {
+		return fmt.Errorf("read rom systems for mapping validation: %w", err)
+	}
+	var unknown []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		systemName := strings.TrimSpace(entry.Name())
+		if systemName == "" || strings.HasPrefix(systemName, ".") {
+			continue
+		}
+		mapped, ok := resolveDestinationSystemKey(systemName)
+		if !ok {
+			unknown = append(unknown, systemName)
+			continue
+		}
+		_ = excludeSystems[mapped]
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	if allowUnmapped {
+		return nil
+	}
+	return fmt.Errorf("unmapped source systems detected: %s (use --allow-unmapped-systems to continue and skip them)", strings.Join(unknown, ", "))
+}
+
+func validateNextUIExtractedRoot(destination string) error {
+	trimuiPath := filepath.Join(destination, "trimui")
+	info, err := os.Stat(trimuiPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("expected extracted NextUI folder %s to exist", trimuiPath)
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("expected %s to be a directory", trimuiPath)
+	}
+	return nil
+}
+
+func copyCuratedCheats(cheatsSrcRoot, destination string, excludeSystems map[string]bool, allowUnmapped bool, g globalFlags) (int, error) {
+	if strings.TrimSpace(cheatsSrcRoot) == "" {
+		return 0, nil
+	}
+	if _, err := os.Stat(cheatsSrcRoot); err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	cheatsDstRoot := filepath.Join(destination, "Cheats")
+	entries, err := os.ReadDir(cheatsSrcRoot)
+	if err != nil {
+		return 0, fmt.Errorf("read cheats root: %w", err)
+	}
+
+	copied := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		srcSystem := strings.TrimSpace(entry.Name())
+		if srcSystem == "" || strings.HasPrefix(srcSystem, ".") {
+			continue
+		}
+		dstSystem, ok := resolveDestinationSystemKey(srcSystem)
+		if !ok {
+			if !allowUnmapped {
+				return copied, fmt.Errorf("unmapped cheats system: %s", srcSystem)
+			}
+			continue
+		}
+		if excludeSystems[dstSystem] {
+			continue
+		}
+
+		srcSystemDir := filepath.Join(cheatsSrcRoot, srcSystem)
+		dstSystemDir := filepath.Join(cheatsDstRoot, dstSystem)
+		err := filepath.WalkDir(srcSystemDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, err := filepath.Rel(srcSystemDir, path)
+			if err != nil {
+				return err
+			}
+			if rel == "." {
+				return nil
+			}
+			dstPath := filepath.Join(dstSystemDir, rel)
+			if d.IsDir() {
+				if g.dryRun {
+					return nil
+				}
+				return fsutil.EnsureDir(dstPath)
+			}
+			if !strings.EqualFold(filepath.Ext(d.Name()), ".cht") {
+				return nil
+			}
+			exists, existsErr := fileExistsAt(dstPath)
+			if existsErr != nil {
+				return existsErr
+			}
+			if exists {
+				return nil
+			}
+			if g.dryRun {
+				emitVerbose(g, "curated", "convert", "dry-run cheats copy", outputFields{"from": path, "to": dstPath})
+				copied++
+				return nil
+			}
+			if err := fsutil.CopyFile(path, dstPath); err != nil {
+				return err
+			}
+			copied++
+			return nil
+		})
+		if err != nil {
+			return copied, err
+		}
+	}
+
+	return copied, nil
+}
+
+func allowArcadeROMPath(systemName, rel, basename string, allowed map[string]bool) bool {
+	if !strings.EqualFold(canonicalDestinationSystemKey(systemName), "ARCADE") {
+		return true
+	}
+	if len(allowed) == 0 {
+		return true
+	}
+	filename := strings.ToLower(strings.TrimSpace(basename))
+	if allowed[filename] {
+		return true
+	}
+	if strings.EqualFold(filepath.Ext(basename), ".chd") {
+		parent := strings.ToLower(strings.TrimSpace(filepath.Base(filepath.Dir(rel))))
+		if parent != "" && allowed[parent+".zip"] {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldSkipROMPath(pathParts []string, isDir bool) bool {
@@ -1070,7 +1317,7 @@ func systemKeyFromFolderName(folderName string) string {
 // generateSystemMapTxt writes a map.txt file into dstSystemDir mapping each ROM
 // filename to its clean display name (extension + region/revision tags stripped).
 // Returns the number of map files written and the number of display-name collisions found.
-func generateSystemMapTxt(dstSystemDir string, g globalFlags) (files int, collisions int, err error) {
+func generateSystemMapTxt(dstSystemDir string, displayOverrides map[string]string, g globalFlags) (files int, collisions int, err error) {
 	entries, err := os.ReadDir(dstSystemDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1104,6 +1351,9 @@ func generateSystemMapTxt(dstSystemDir string, g globalFlags) (files int, collis
 		}
 
 		displayName := stripROMDisplayTags(name)
+		if override, ok := displayOverrides[strings.ToLower(name)]; ok && strings.TrimSpace(override) != "" {
+			displayName = strings.TrimSpace(override)
+		}
 		mapEntries = append(mapEntries, mapEntry{filename: name, displayName: displayName})
 		displayCount[strings.ToLower(displayName)]++
 	}
@@ -1134,7 +1384,7 @@ func generateSystemMapTxt(dstSystemDir string, g globalFlags) (files int, collis
 	var b strings.Builder
 	for _, e := range mapEntries {
 		b.WriteString(e.filename)
-		b.WriteByte('|')
+		b.WriteByte('\t')
 		b.WriteString(e.displayName)
 		b.WriteByte('\n')
 	}
@@ -1149,7 +1399,7 @@ func generateSystemMapTxt(dstSystemDir string, g globalFlags) (files int, collis
 
 // generateAllSystemMapTxt scans all system folders under romsDstRoot and writes
 // a map.txt for each flat (non-tree-mode) system.
-func generateAllSystemMapTxt(romsDstRoot string, g globalFlags) (files int, collisions int, err error) {
+func generateAllSystemMapTxt(romsDstRoot string, arcadeDisplayOverrides map[string]string, g globalFlags) (files int, collisions int, err error) {
 	systemDirs, err := os.ReadDir(romsDstRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1169,7 +1419,11 @@ func generateAllSystemMapTxt(romsDstRoot string, g globalFlags) (files int, coll
 		}
 
 		systemDir := filepath.Join(romsDstRoot, folderName)
-		f, c, mapErr := generateSystemMapTxt(systemDir, g)
+		overrides := map[string]string(nil)
+		if systemKey == "ARCADE" {
+			overrides = arcadeDisplayOverrides
+		}
+		f, c, mapErr := generateSystemMapTxt(systemDir, overrides, g)
 		if mapErr != nil {
 			return files, collisions, mapErr
 		}
@@ -1183,9 +1437,9 @@ func generateAllSystemMapTxt(romsDstRoot string, g globalFlags) (files int, coll
 func ensureArcadeMap(romsSrc, romsDstRoot string, g globalFlags) (bool, error) {
 	arcadeDst := filepath.Join(romsDstRoot, nextUISystemFolderName("ARCADE"), "map.txt")
 	candidates := []string{
+		filepath.Join(romsSrc, "FBNeo", "map.txt"),
 		filepath.Join(romsSrc, "ARCADE", "map.txt"),
 		filepath.Join(romsSrc, "MAME", "map.txt"),
-		filepath.Join(romsSrc, "FBNeo", "map.txt"),
 		filepath.Join(romsSrc, "NEOGEO", "map.txt"),
 		filepath.Join(romsSrc, "CPS3", "map.txt"),
 	}
@@ -1209,6 +1463,71 @@ func ensureArcadeMap(romsSrc, romsDstRoot string, g globalFlags) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func loadArcadeMapHints(romsSrc string) (allowed map[string]bool, display map[string]string, sourceMapPath string, err error) {
+	candidates := []string{
+		filepath.Join(romsSrc, "FBNeo", "map.txt"),
+		filepath.Join(romsSrc, "ARCADE", "map.txt"),
+		filepath.Join(romsSrc, "MAME", "map.txt"),
+		filepath.Join(romsSrc, "NEOGEO", "map.txt"),
+		filepath.Join(romsSrc, "CPS3", "map.txt"),
+	}
+
+	for _, p := range candidates {
+		exists, statErr := fileExistsAt(p)
+		if statErr != nil {
+			return nil, nil, "", statErr
+		}
+		if !exists {
+			continue
+		}
+
+		f, openErr := os.Open(p)
+		if openErr != nil {
+			return nil, nil, "", openErr
+		}
+		defer func() { _ = f.Close() }()
+
+		allowed = map[string]bool{}
+		display = map[string]string{}
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			filename, label := parseArcadeMapLine(line)
+			if filename == "" {
+				continue
+			}
+			allowed[strings.ToLower(filename)] = true
+			if strings.TrimSpace(label) != "" {
+				display[strings.ToLower(filename)] = strings.TrimSpace(label)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return nil, nil, "", err
+		}
+		return allowed, display, p, nil
+	}
+
+	return map[string]bool{}, map[string]string{}, "", nil
+}
+
+func parseArcadeMapLine(line string) (filename string, label string) {
+	if idx := strings.IndexRune(line, '\t'); idx > 0 {
+		return strings.TrimSpace(line[:idx]), strings.TrimSpace(line[idx+1:])
+	}
+	if idx := strings.IndexRune(line, '|'); idx > 0 {
+		return strings.TrimSpace(line[:idx]), strings.TrimSpace(line[idx+1:])
+	}
+	parts := strings.Fields(line)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(strings.TrimPrefix(line, parts[0]))
 }
 
 type collectionEntry struct {

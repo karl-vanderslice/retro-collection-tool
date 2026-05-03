@@ -103,23 +103,31 @@ Required flags:
 - `--source <path>`: extracted Done Set 3 root containing `Roms/` and `BIOS/`
 - `--destination <path>`: export root where `Roms/` and `Bios/` will be created
 
+Optional validation flag:
+
+- `--allow-unmapped-systems`: continue when source folders do not map to known NextUI tags (unknown systems are skipped). By default, conversion fails fast on unmapped systems.
+
 Behavior for Done Set 3 -> NextUI:
 
 - Cleans destination `Roms/` and `Bios/` first on every run to avoid duplicate carry-over from prior exports.
 - Writes only `Roms/` and `Bios/` into the destination root.
 - Also writes `Collections/` with franchise-focused collection lists.
 - Flattens ROM subfolders into each system folder for scroll-first browsing.
+- Validates source system folder names against known NextUI tag mappings before conversion.
 - Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
 - Uses numbered release-order folder naming (for example `06) Nintendo Entertainment System (FC)`) so menu order is deterministic.
 - Merges `ARCADE`, `MAME`, `FBNeo`, `CPS3`, and `NEOGEO` sources into one `Arcade` destination folder.
+- Prefers FBNeo arcade `map.txt` metadata when available, and filters merged arcade ROMs to entries present in the selected arcade map to better align with the NextUI `FBN` core.
 - For `MD`, routes `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` (with matching artwork in `Roms/10) Sega 32X (32X)/.media/`).
 - Copies `map.txt` into the Arcade folder when present in source arcade folders.
+- Writes generated `map.txt` files using tab separators (`filename<TAB>Display Name`) as required by NextUI.
 - Converts `.7z` archives to `.zip` (keeps all other ROM file extensions unchanged).
 - For flatten-mode systems already predominantly using `.zip`, converts remaining raw single-file ROMs (for example `.gba`, `.smc`, `.sfc`) to `.zip` for folder uniformity.
 - Copies artwork from `Roms/<system>/Imgs/*.png` into `Roms/<system>/.media/*.png`.
 - Recursively copies BIOS from `BIOS/` to `Bios/`.
 - Preserves PlayStation `.hidden` content so `.m3u` playlists that reference `.hidden/...` continue to work while disc images stay hidden from normal browsing.
-- Preserves directory trees for `DOS`, `SCUMMVM`, and `PORTS` instead of flattening, which matches typical NextUI pak expectations for those systems.
+- Preserves directory trees for `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` instead of flattening, which matches typical NextUI pak expectations for those systems.
+- Copies cheats from source `Cheats/<system>/` to destination `Cheats/<tag>/` for `.cht` files.
 - Generates franchise collections such as Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, and Pokemon.
 
 Example:

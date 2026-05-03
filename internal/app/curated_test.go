@@ -29,7 +29,7 @@ func TestCopySystemROMsFlattenSkipsManualsAndImgs(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Manuals", "manual.pdf"), "doc")
 	mustWriteFile(t, filepath.Join(src, "Imgs", "root-game.png"), "art")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCopySystemROMsFlattenSkipsPuristCategories(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Translations (MD)", "Translation One.zip"), "translation")
 	mustWriteFile(t, filepath.Join(src, "Unlicensed Homebrew (MD)", "Homebrew One.zip"), "homebrew")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs purist categories: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCopySystemROMsMDRoutes32XToDedicatedFolder(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "32X Games (Genesis)", "Doom.zip"), "rom")
 	mustWriteFile(t, filepath.Join(src, "All but the Best (Genesis)", "Sonic.zip"), "rom")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, mdDst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("MD", src, mdDst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs md 32x route: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestCopySystemROMsTreePreservesSubdirsForScummVM(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Game One", "data.001"), "bin")
 	mustWriteFile(t, filepath.Join(src, "Imgs", "cover.png"), "art")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("SCUMMVM", src, dst, systemModeTree, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("SCUMMVM", src, dst, systemModeTree, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs tree: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestCopySystemROMsFlattenPreservesHiddenDiscFiles(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, ".hidden", "Disc 1.chd"), "chd")
 	mustWriteFile(t, filepath.Join(src, "Game.m3u"), ".hidden/Disc 1.chd\n")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("PS", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("PS", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs flatten hidden: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestCopySystemROMsArcadePreservesCHDRelativePath(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "kinst", "kinst.chd"), "chd")
 	mustWriteFile(t, filepath.Join(src, "kinst.zip"), "zip")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("ARCADE", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("ARCADE", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs arcade chd: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestCopySystemROMsDryRunCounts7zConversion(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(src, "pack.7z"), "placeholder")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{dryRun: true})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{dryRun: true})
 	if err != nil {
 		t.Fatalf("copySystemROMs dry-run 7z: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestCopySystemROMsFlattenSkipsCFGSidecar(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "Game.tap"), "rom")
 	mustWriteFile(t, filepath.Join(src, "Game.tap.p2k.cfg"), "cfg")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("ZXS", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("ZXS", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs flatten cfg: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestCopySystemROMsSkipsCommonCruftFiles(t *testing.T) {
 	mustWriteFile(t, filepath.Join(src, "desktop.ini"), "junk")
 	mustWriteFile(t, filepath.Join(src, "__MACOSX", "artifact.bin"), "junk")
 
-	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, globalFlags{})
+	copied, duplicates, converted, _, _, err := copySystemROMs("FC", src, dst, systemModeFlatten, false, systemCopyOptions{}, globalFlags{})
 	if err != nil {
 		t.Fatalf("copySystemROMs cruft: %v", err)
 	}
@@ -498,7 +498,7 @@ func TestGenerateSystemMapTxt(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dir, "map.txt"), "old")
 	mustWriteFile(t, filepath.Join(dir, "thumbs.db"), "junk")
 
-	files, collisions, err := generateSystemMapTxt(dir, g)
+	files, collisions, err := generateSystemMapTxt(dir, nil, g)
 	if err != nil {
 		t.Fatalf("generateSystemMapTxt: %v", err)
 	}
@@ -520,10 +520,10 @@ func TestGenerateSystemMapTxt(t *testing.T) {
 
 	// Each ROM should appear as "filename|display" — check key lines.
 	for _, line := range []string{
-		"Metroid (USA).nes|Metroid",
-		"Mega Man 2 (USA).nes|Mega Man 2",
-		"Legend of Zelda, The (USA) [!].nes|The Legend of Zelda",
-		"Castlevania (USA).nes|Castlevania",
+		"Metroid (USA).nes\tMetroid",
+		"Mega Man 2 (USA).nes\tMega Man 2",
+		"Legend of Zelda, The (USA) [!].nes\tThe Legend of Zelda",
+		"Castlevania (USA).nes\tCastlevania",
 	} {
 		if !strings.Contains(got, line) {
 			t.Errorf("map.txt missing expected line %q\nfull content:\n%s", line, got)
@@ -531,7 +531,7 @@ func TestGenerateSystemMapTxt(t *testing.T) {
 	}
 
 	// thumbs.db and the old map.txt must not appear as entries.
-	for _, bad := range []string{"thumbs.db|", "map.txt|"} {
+	for _, bad := range []string{"thumbs.db\t", "map.txt\t"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("map.txt should not contain %q\nfull content:\n%s", bad, got)
 		}
@@ -549,7 +549,7 @@ func TestGenerateSystemMapTxtCollisions(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dir, "Game (Europe).zip"), "rom")
 	mustWriteFile(t, filepath.Join(dir, "Unique Title (USA).zip"), "rom")
 
-	_, collisions, err := generateSystemMapTxt(dir, g)
+	_, collisions, err := generateSystemMapTxt(dir, nil, g)
 	if err != nil {
 		t.Fatalf("generateSystemMapTxt: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestGenerateSystemMapTxtDryRun(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(dir, "Metroid (USA).nes"), "rom")
 
-	files, _, err := generateSystemMapTxt(dir, g)
+	files, _, err := generateSystemMapTxt(dir, nil, g)
 	if err != nil {
 		t.Fatalf("generateSystemMapTxt dry-run: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestGenerateAllSystemMapTxtSkipsTreeMode(t *testing.T) {
 	dosDir := filepath.Join(root, "27) MS-DOS (DOS)")
 	mustWriteFile(t, filepath.Join(dosDir, "SomeGame", "GAME.EXE"), "exe")
 
-	files, _, err := generateAllSystemMapTxt(root, g)
+	files, _, err := generateAllSystemMapTxt(root, nil, g)
 	if err != nil {
 		t.Fatalf("generateAllSystemMapTxt: %v", err)
 	}
@@ -602,4 +602,97 @@ func TestGenerateAllSystemMapTxtSkipsTreeMode(t *testing.T) {
 
 	assertFileExists(t, filepath.Join(flatDir, "map.txt"))
 	assertFileMissing(t, filepath.Join(dosDir, "map.txt"))
+}
+
+func TestResolveSystemModeSegaCDUsesTree(t *testing.T) {
+	t.Parallel()
+
+	if got := resolveSystemMode("SEGACD"); got != systemModeTree {
+		t.Fatalf("expected SEGACD to use tree mode, got %q", got)
+	}
+}
+
+func TestResolveDestinationSystemKeyAliases(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"Mega CD": "SEGACD",
+		"FBNeo":   "ARCADE",
+		"PSX":     "PS",
+		"SNES":    "SFC",
+	}
+
+	for input, want := range cases {
+		got, ok := resolveDestinationSystemKey(input)
+		if !ok {
+			t.Fatalf("expected %q to resolve", input)
+		}
+		if got != want {
+			t.Fatalf("resolveDestinationSystemKey(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestParseArcadeMapLineSupportsTabAndPipe(t *testing.T) {
+	t.Parallel()
+
+	name, label := parseArcadeMapLine("mslug.zip\tMetal Slug")
+	if name != "mslug.zip" || label != "Metal Slug" {
+		t.Fatalf("tab parse mismatch name=%q label=%q", name, label)
+	}
+
+	name, label = parseArcadeMapLine("sf2.zip|Street Fighter II")
+	if name != "sf2.zip" || label != "Street Fighter II" {
+		t.Fatalf("pipe parse mismatch name=%q label=%q", name, label)
+	}
+}
+
+func TestCopyCuratedCheatsMapsSystems(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	mustWriteFile(t, filepath.Join(src, "Mega CD", "Sonic CD (USA).cue.cht"), "cheat")
+	mustWriteFile(t, filepath.Join(src, "FBNeo", "mslug.zip.cht"), "cheat")
+
+	copied, err := copyCuratedCheats(src, dst, nil, false, globalFlags{})
+	if err != nil {
+		t.Fatalf("copyCuratedCheats: %v", err)
+	}
+	if copied != 2 {
+		t.Fatalf("expected 2 copied cheats, got %d", copied)
+	}
+
+	assertFileExists(t, filepath.Join(dst, "Cheats", "SEGACD", "Sonic CD (USA).cue.cht"))
+	assertFileExists(t, filepath.Join(dst, "Cheats", "ARCADE", "mslug.zip.cht"))
+}
+
+func TestCopySystemROMsArcadeFiltersByAllowedSet(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	mustWriteFile(t, filepath.Join(src, "mslug.zip"), "zip")
+	mustWriteFile(t, filepath.Join(src, "other.zip"), "zip")
+
+	copied, duplicates, converted, _, _, err := copySystemROMs(
+		"ARCADE",
+		src,
+		dst,
+		systemModeFlatten,
+		false,
+		systemCopyOptions{arcadeAllowed: map[string]bool{"mslug.zip": true}},
+		globalFlags{},
+	)
+	if err != nil {
+		t.Fatalf("copySystemROMs arcade filter: %v", err)
+	}
+	if copied != 1 || duplicates != 0 || converted != 0 {
+		t.Fatalf("unexpected counts copied=%d duplicates=%d converted=%d", copied, duplicates, converted)
+	}
+
+	assertFileExists(t, filepath.Join(dst, "mslug.zip"))
+	assertFileMissing(t, filepath.Join(dst, "other.zip"))
 }

@@ -194,6 +194,7 @@ type curatedConvertStats struct {
 	ROMDuplicates  int
 	CorruptROMs    int
 	CheatsCopied   int
+	OverlaysCopied int
 	ArtCopied      int
 	ArtDuplicates  int
 	BIOSCopied     int
@@ -233,6 +234,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
 	allowUnmappedSystems := fs.Bool("allow-unmapped-systems", false, "continue conversion when source system folders do not map to known NextUI tags (unknown systems are skipped)")
 	nextUIRelease := fs.String("nextui-release", "", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; the downloaded zip is cached in the OS user cache directory`)
+	nextUIOverlays := fs.String("nextui-overlays", "", `install optional NextUI overlay packs into matching existing Overlays folders without overwriting files; comma-separated providers: krutzotrem,skywalker541`)
 	device := fs.String("device", "", `target device for autorun icon placement (supported: trimui-brick); copies the device icon and autorun.inf to the destination root`)
 
 	if err := fs.Parse(args); err != nil {
@@ -300,6 +302,20 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	if err != nil {
 		return err
 	}
+	if providers := strings.TrimSpace(*nextUIOverlays); providers != "" {
+		logf := func(format string, a ...any) {
+			emitInfo(g, "curated", "convert", fmt.Sprintf(format, a...), nil)
+		}
+		if g.dryRun {
+			emitInfo(g, "curated", "convert", "dry-run overlays install", outputFields{"providers": providers})
+		} else {
+			overlaysCopied, err := installNextUIOverlayProviders(providers, dstRoot, logf)
+			if err != nil {
+				return fmt.Errorf("nextui overlays: %w", err)
+			}
+			stats.OverlaysCopied = overlaysCopied
+		}
+	}
 	cheatsCopied, err := copyCuratedCheats(filepath.Join(srcRoot, "Cheats"), dstRoot, excludeMap, *allowUnmappedSystems, g)
 	if err != nil {
 		return err
@@ -333,6 +349,7 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"rezipped_roms":     stats.RezippedROMs,
 		"corrupt_roms":      stats.CorruptROMs,
 		"cheats_copied":     stats.CheatsCopied,
+		"overlays_copied":   stats.OverlaysCopied,
 		"collections":       stats.Collections,
 		"collection_roms":   stats.CollectionROMs,
 		"arcade_map":        stats.ArcadeMap,

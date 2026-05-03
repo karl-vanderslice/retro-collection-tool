@@ -107,6 +107,10 @@ Optional validation flag:
 
 - `--allow-unmapped-systems`: continue when source folders do not map to known NextUI tags (unknown systems are skipped). By default, conversion fails fast on unmapped systems.
 
+Optional NextUI overlays flag:
+
+- `--nextui-overlays <csv>`: install optional overlays from provider repos into existing `Overlays/` system folders. Supported providers: `krutzotrem`, `skywalker541`. Files are copied only when missing and never overwrite existing files.
+
 Behavior for Done Set 3 -> NextUI:
 
 - Cleans destination `Roms/` and `Bios/` first on every run to avoid duplicate carry-over from prior exports.
@@ -128,6 +132,7 @@ Behavior for Done Set 3 -> NextUI:
 - Preserves PlayStation `.hidden` content so `.m3u` playlists that reference `.hidden/...` continue to work while disc images stay hidden from normal browsing.
 - Preserves directory trees for `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` instead of flattening, which matches typical NextUI pak expectations for those systems.
 - Copies cheats from source `Cheats/<system>/` to destination `Cheats/<tag>/` for `.cht` files.
+- Optionally installs overlay packs from provider repositories into matching destination overlay folders without overwriting any existing files.
 - Generates franchise collections such as Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, and Pokemon.
 
 Example:

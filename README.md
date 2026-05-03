@@ -27,6 +27,7 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
   - PlayStation `.m3u` + `.hidden` multi-disc layouts are preserved.
   - `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` retain folder trees instead of flattening.
   - Copies `.cht` cheat files from `Cheats/<system>/` into `Cheats/<NextUI_TAG>/`.
+  - Optional overlay pack installers for `KrutzOtrem/Trimui-Brick-Overlays` and `SkyWalker541/TrimUI-Brick-Overlays` via `--nextui-overlays`, with copy-once behavior (never overwrite existing files).
   - Auto-generates `Collections/*.txt` for major series (Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, Pokemon).
 
 ## Quick start
@@ -57,6 +58,7 @@ Done Set 3 to NextUI example:
 
 - `bin/retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export"`
 - `bin/retro-collection-tool --dry-run curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export"`
+- `bin/retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export" --nextui-overlays krutzotrem,skywalker541`
 
 ## Configuration
 

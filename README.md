@@ -15,18 +15,21 @@ Production-oriented CLI wrapper for [Igir](https://github.com/emmercm/igir), bui
 - Imports BIOS files from configured source roots using catalog matching and optional hash verification.
 - Exports selected systems to an external destination (for example, SD card media).
 - Converts pre-curated set layouts (Done Set 3) into NextUI-ready `Roms` + `Bios` structure with flattened ROM folders and copied artwork.
+  - Defaults to SD-card-ready output: cleans destination root, installs latest NextUI release, then rebuilds content.
   - Validates source system folder names against known NextUI emulator tags before conversion.
   - Rebuilds destination `Roms/` and `Bios/` from scratch on each run (clean-first) to avoid duplicate carry-over.
   - Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
   - Applies release-order numbered system folders (for example `06) Nintendo Entertainment System (FC)`).
   - Uses a single Arcade destination by merging `ARCADE`, `MAME`, `FBNeo`, `CPS3`, and `NEOGEO` sources.
-  - Prefers FBNeo `map.txt` metadata for arcade display names and filters merged arcade ROMs to names present in the selected arcade map set when available.
+  - Prefers source FBNeo `map.txt` metadata for arcade display names and filters merged arcade ROMs to names present in the selected arcade map set when available.
+  - Merges missing arcade display names from FBNeo upstream `gamelist.txt` and normalizes labels to plain game titles (drops region/set suffix tags such as `(US, set 1)`).
   - Splits `MD` `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` with artwork routed to `Roms/10) Sega 32X (32X)/.media/`.
   - Copies `map.txt` to the Arcade folder when present in source folders and emits tab-delimited `map.txt` files for NextUI compatibility.
   - `.7z` ROM archives are converted to `.zip` for NextUI compatibility.
   - PlayStation `.m3u` + `.hidden` multi-disc layouts are preserved.
   - `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` retain folder trees instead of flattening.
   - Copies `.cht` cheat files from `Cheats/<system>/` into `Cheats/<NextUI_TAG>/`.
+  - Preloads missing `.cht` files from libretro cheat packs for supported systems already present in destination `Roms/` (copy-once, never overwrite existing cheats).
   - Optional overlay pack installers for `KrutzOtrem/Trimui-Brick-Overlays` and `SkyWalker541/TrimUI-Brick-Overlays` via `--nextui-overlays`, with copy-once behavior (never overwrite existing files).
   - Auto-generates `Collections/*.txt` for major series (Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, Pokemon).
 
@@ -59,6 +62,7 @@ Done Set 3 to NextUI example:
 - `bin/retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export"`
 - `bin/retro-collection-tool --dry-run curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export"`
 - `bin/retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export" --nextui-overlays krutzotrem,skywalker541`
+- `bin/retro-collection-tool curated convert --set done-set-3 --target nextui --source "/mnt/d/done set/final" --destination "/mnt/d/done set/export" --nextui-release none` (skip firmware install)
 
 ## Configuration
 

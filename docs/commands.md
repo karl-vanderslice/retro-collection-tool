@@ -121,7 +121,8 @@ Behavior for Done Set 3 -> NextUI:
 - Excludes `Translations`, `Unlicensed Homebrew`, and `Hacks` folders by default for a purist baseline set.
 - Uses numbered release-order folder naming (for example `06) Nintendo Entertainment System (FC)`) so menu order is deterministic.
 - Merges `ARCADE`, `MAME`, `FBNeo`, `CPS3`, and `NEOGEO` sources into one `Arcade` destination folder.
-- Prefers FBNeo arcade `map.txt` metadata when available, and filters merged arcade ROMs to entries present in the selected arcade map to better align with the NextUI `FBN` core.
+- Prefers source FBNeo arcade `map.txt` metadata when available, and filters merged arcade ROMs to entries present in the selected arcade map to better align with the NextUI `FBN` core.
+- Falls back to FBNeo upstream `gamelist.txt` names for arcade display labels when source arcade `map.txt` is missing.
 - For `MD`, routes `32X Games (...)` content into dedicated `Roms/10) Sega 32X (32X)/` (with matching artwork in `Roms/10) Sega 32X (32X)/.media/`).
 - Copies `map.txt` into the Arcade folder when present in source arcade folders.
 - Writes generated `map.txt` files using tab separators (`filename<TAB>Display Name`) as required by NextUI.
@@ -132,6 +133,7 @@ Behavior for Done Set 3 -> NextUI:
 - Preserves PlayStation `.hidden` content so `.m3u` playlists that reference `.hidden/...` continue to work while disc images stay hidden from normal browsing.
 - Preserves directory trees for `SEGACD`, `PCECD`, `DOS`, `SCUMMVM`, and `PORTS` instead of flattening, which matches typical NextUI pak expectations for those systems.
 - Copies cheats from source `Cheats/<system>/` to destination `Cheats/<tag>/` for `.cht` files.
+- Preloads missing cheats from libretro cheat packs for supported systems detected in destination `Roms/` (copy-once; existing files are not overwritten).
 - Optionally installs overlay packs from provider repositories into matching destination overlay folders without overwriting any existing files.
 - Generates franchise collections such as Final Fantasy, Castlevania, Metroid, Mario, Donkey Kong, TMNT, Zelda, Mega Man, Sonic, and Pokemon.
 

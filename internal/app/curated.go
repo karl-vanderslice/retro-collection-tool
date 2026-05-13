@@ -2,9 +2,13 @@ package app
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/karl-vanderslice/retro-collection-tool/internal/fsutil"
@@ -23,6 +28,8 @@ var romGoodToolsTagRe = regexp.MustCompile(`\s*\[[^\]]{0,15}\]\s*$`)
 // romRegionRevTagRe matches common region and revision parentheticals at the end of a name,
 // e.g. (USA), (Europe), (Japan), (Rev A), (v1.1), (Beta), (Proto), (Demo), (En,Fr,De).
 var romRegionRevTagRe = regexp.MustCompile(`(?i)\s*\((?:USA|U\.S\.A\.|Europe|EUR|Eu|Japan|JPN|Jpn|World|UK|Australia|Aus|Brazil|BRA|Korea|KOR|China|Asia|Canada|France|Germany|Spain|Italy|Sweden|Netherlands|Denmark|Norway|Finland|En(?:,[A-Za-z,]+)?|Fr|De|Ja|Es|It|Pt|Nl|Ko|Zh|Sv|No|Da|Rev\.?\s*[A-Z0-9]+|v\d+\.\d+[^)]*|Beta[^)]*|Proto(?:type)?[^)]*|Demo[^)]*|Sample[^)]*|Unl|Unlicensed|Pirate|Kiosk|Virtual Console)\)\s*$`)
+
+var arcadeTrailingTagRe = regexp.MustCompile(`\s*(?:\([^)]*\)|\[[^\]]*\])\s*$`)
 
 var excludedROMFolders = map[string]bool{
 	"imgs":                true,
@@ -38,6 +45,46 @@ var excludedROMFilenames = map[string]bool{
 	"thumbs.db":   true,
 	"desktop.ini": true,
 	"ehthumbs.db": true,
+}
+
+const (
+	libretroDatabaseAPIBase = "https://api.github.com/repos/libretro/libretro-database/contents/cht"
+	fbneoGameListURL        = "https://raw.githubusercontent.com/libretro/FBNeo/master/gamelist.txt"
+	gitHubAPIRequestTimeout = 90 * time.Second
+	fbneoCacheTTL           = 7 * 24 * time.Hour
+)
+
+var nextUISystemToLibretroCheatDirCandidates = map[string][]string{
+	"ARCADE":              {"FBNeo - Arcade Games", "FB Alpha - Arcade Games"},
+	"ATARI":               {"Atari - 2600"},
+	"FIFTYTWOHUNDRED":     {"Atari - 5200"},
+	"SEVENTYEIGHTHUNDRED": {"Atari - 7800"},
+	"COLECO":              {"Coleco - ColecoVision"},
+	"FC":                  {"Nintendo - Nintendo Entertainment System"},
+	"FDS":                 {"Nintendo - Family Computer Disk System"},
+	"MS":                  {"Sega - Master System - Mark III"},
+	"MD":                  {"Sega - Mega Drive - Genesis"},
+	"X32":                 {"Sega - 32X"},
+	"SEGACD":              {"Sega - Mega-CD - Sega CD"},
+	"SFC":                 {"Nintendo - Super Nintendo Entertainment System"},
+	"SATELLAVIEW":         {"Nintendo - Satellaview"},
+	"GB":                  {"Nintendo - Game Boy"},
+	"GBC":                 {"Nintendo - Game Boy Color"},
+	"GBA":                 {"Nintendo - Game Boy Advance"},
+	"GG":                  {"Sega - Game Gear"},
+	"LYNX":                {"Atari - Lynx"},
+	"PCE":                 {"NEC - PC Engine - TurboGrafx 16"},
+	"PCECD":               {"NEC - PC Engine CD - TurboGrafx-CD"},
+	"PS":                  {"Sony - PlayStation"},
+	"NDS":                 {"Nintendo - Nintendo DS"},
+	"DOS":                 {"DOS"},
+	"ZXS":                 {"Sinclair - ZX Spectrum +3"},
+}
+
+type gitHubContentEntry struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	DownloadURL string `json:"download_url"`
 }
 
 const md32XSystemFolderName = "10) Sega 32X (32X)"
@@ -229,11 +276,11 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	target := fs.String("target", "nextui", "target firmware layout (currently supported: nextui)")
 	source := fs.String("source", "", "source root path containing Done Set 3 folders (Roms, BIOS)")
 	destination := fs.String("destination", "", "destination root path for export")
-	full := fs.Bool("full", false, "wipe and rebuild the full destination before conversion (default: incremental, skip existing files)")
+	full := fs.Bool("full", true, "wipe and rebuild the full destination before conversion (default: true)")
 	permanent := fs.Bool("permanent", false, "no hard links; recompress all ROMs to maximum zip compression (for archival storage)")
 	excludeSystems := fs.String("exclude-systems", "ATARI,FIFTYTWOHUNDRED,SEVENTYEIGHTHUNDRED,COLECO,VECTREX,FDS,SATELLAVIEW,GW,LYNX,COMMODORE,ZXS,PICO", "comma-separated list of system tags to exclude by default; use empty string to include all")
 	allowUnmappedSystems := fs.Bool("allow-unmapped-systems", false, "continue conversion when source system folders do not map to known NextUI tags (unknown systems are skipped)")
-	nextUIRelease := fs.String("nextui-release", "", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; the downloaded zip is cached in the OS user cache directory`)
+	nextUIRelease := fs.String("nextui-release", "latest", `download and extract a NextUI release into the destination before copying ROMs; accepts "latest" or a version tag like "v6.10.0"; set to "none" to skip; the downloaded zip is cached in the OS user cache directory`)
 	nextUIOverlays := fs.String("nextui-overlays", "", `install optional NextUI overlay packs into matching existing Overlays folders without overwriting files; comma-separated providers: krutzotrem,skywalker541`)
 	device := fs.String("device", "", `target device for autorun icon placement (supported: trimui-brick); copies the device icon and autorun.inf to the destination root`)
 
@@ -274,8 +321,13 @@ func runCuratedConvert(g globalFlags, args []string) error {
 	if err := validateCuratedSourceSystemMappings(romsSrc, excludeMap, *allowUnmappedSystems); err != nil {
 		return err
 	}
+	if *full {
+		if err := prepareCuratedDestinationRoot(dstRoot, g); err != nil {
+			return err
+		}
+	}
 
-	if releaseTag := strings.TrimSpace(*nextUIRelease); releaseTag != "" {
+	if releaseTag, ok := resolveNextUIReleaseTag(*nextUIRelease); ok {
 		cacheDir, err := nextUIDefaultCacheDir()
 		if err != nil {
 			return err
@@ -321,6 +373,12 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		return err
 	}
 	stats.CheatsCopied = cheatsCopied
+
+	preloadedCheats, err := preloadLibretroCheats(dstRoot, excludeMap, g)
+	if err != nil {
+		return err
+	}
+	stats.CheatsCopied += preloadedCheats
 
 	if deviceName := strings.TrimSpace(*device); deviceName != "" {
 		logf := func(format string, a ...any) {
@@ -368,6 +426,34 @@ func runCuratedConvert(g globalFlags, args []string) error {
 		"dry_run": g.dryRun,
 	})
 
+	return nil
+}
+
+func resolveNextUIReleaseTag(raw string) (string, bool) {
+	tag := strings.ToLower(strings.TrimSpace(raw))
+	if tag == "" || tag == "none" || tag == "off" || tag == "false" || tag == "skip" {
+		return "", false
+	}
+	return strings.TrimSpace(raw), true
+}
+
+func prepareCuratedDestinationRoot(destination string, g globalFlags) error {
+	clean := filepath.Clean(destination)
+	if clean == "" || clean == "." || clean == string(filepath.Separator) {
+		return fmt.Errorf("refusing to clean unsafe destination path: %q", destination)
+	}
+
+	if g.dryRun {
+		emitInfo(g, "curated", "convert", "dry-run clean destination root", outputFields{"destination": clean})
+		return nil
+	}
+
+	if err := fsutil.RemoveIfExists(clean); err != nil {
+		return fmt.Errorf("clean destination root %s: %w", clean, err)
+	}
+	if err := fsutil.EnsureDir(clean); err != nil {
+		return fmt.Errorf("prepare destination root %s: %w", clean, err)
+	}
 	return nil
 }
 
@@ -524,7 +610,7 @@ func convertDoneSet3ToNextUI(romsSrc, biosSrc, destination string, full, permane
 	if err != nil {
 		return stats, err
 	}
-	stats.ArcadeMap = hasArcadeMap
+	stats.ArcadeMap = hasArcadeMap || len(arcadeDisplayNames) > 0
 
 	mapFiles, mapCollisions, err := generateAllSystemMapTxt(romsDstRoot, arcadeDisplayNames, g)
 	if err != nil {
@@ -1236,17 +1322,44 @@ func allowArcadeROMPath(systemName, rel, basename string, allowed map[string]boo
 	if len(allowed) == 0 {
 		return true
 	}
-	filename := strings.ToLower(strings.TrimSpace(basename))
+	filename := normalizeArcadeROMKey(basename)
 	if allowed[filename] {
 		return true
 	}
 	if strings.EqualFold(filepath.Ext(basename), ".chd") {
 		parent := strings.ToLower(strings.TrimSpace(filepath.Base(filepath.Dir(rel))))
-		if parent != "" && allowed[parent+".zip"] {
+		if parent != "" && allowed[normalizeArcadeROMKey(parent)] {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeArcadeROMKey(filename string) string {
+	if strings.TrimSpace(filename) == "" {
+		return ""
+	}
+	key := strings.ToLower(strings.TrimSpace(filepath.Base(filename)))
+	if key == "" || key == "." {
+		return ""
+	}
+	if filepath.Ext(key) == "" {
+		return key + ".zip"
+	}
+	return key
+}
+
+func normalizeArcadeDisplayName(name string) string {
+	clean := strings.TrimSpace(name)
+	for {
+		next := strings.TrimSpace(arcadeTrailingTagRe.ReplaceAllString(clean, ""))
+		if next == clean {
+			break
+		}
+		clean = next
+	}
+	clean = strings.Join(strings.Fields(clean), " ")
+	return strings.TrimSpace(clean)
 }
 
 func shouldSkipROMPath(pathParts []string, isDir bool) bool {
@@ -1329,6 +1442,19 @@ func systemKeyFromFolderName(folderName string) string {
 		return ""
 	}
 	return strings.ToUpper(strings.TrimSpace(folderName[start+1 : len(folderName)-1]))
+}
+
+func canonicalSystemKeyFromFolderName(folderName string) string {
+	tag := systemKeyFromFolderName(folderName)
+	if tag == "" {
+		return ""
+	}
+	for key, spec := range systemMenuSpecs {
+		if strings.EqualFold(spec.Tag, tag) {
+			return key
+		}
+	}
+	return tag
 }
 
 // generateSystemMapTxt writes a map.txt file into dstSystemDir mapping each ROM
@@ -1430,7 +1556,7 @@ func generateAllSystemMapTxt(romsDstRoot string, arcadeDisplayOverrides map[stri
 			continue
 		}
 		folderName := entry.Name()
-		systemKey := systemKeyFromFolderName(folderName)
+		systemKey := canonicalSystemKeyFromFolderName(folderName)
 		if systemModes[strings.ToLower(systemKey)] == systemModeTree {
 			continue
 		}
@@ -1516,21 +1642,320 @@ func loadArcadeMapHints(romsSrc string) (allowed map[string]bool, display map[st
 				continue
 			}
 			filename, label := parseArcadeMapLine(line)
+			filename = normalizeArcadeROMKey(filename)
 			if filename == "" {
 				continue
 			}
-			allowed[strings.ToLower(filename)] = true
-			if strings.TrimSpace(label) != "" {
-				display[strings.ToLower(filename)] = strings.TrimSpace(label)
+			allowed[filename] = true
+			if cleaned := normalizeArcadeDisplayName(label); cleaned != "" {
+				display[filename] = cleaned
 			}
 		}
 		if err := scanner.Err(); err != nil {
 			return nil, nil, "", err
 		}
+		if fbneoDisplay, fbErr := loadFBNeoArcadeDisplayHints(); fbErr == nil {
+			for filename, label := range fbneoDisplay {
+				if _, ok := display[filename]; !ok && strings.TrimSpace(label) != "" {
+					display[filename] = label
+				}
+			}
+		}
 		return allowed, display, p, nil
 	}
 
-	return map[string]bool{}, map[string]string{}, "", nil
+	fbneoDisplay, fbErr := loadFBNeoArcadeDisplayHints()
+	if fbErr != nil {
+		return map[string]bool{}, map[string]string{}, "", nil
+	}
+	if len(fbneoDisplay) == 0 {
+		return map[string]bool{}, map[string]string{}, "", nil
+	}
+	return map[string]bool{}, fbneoDisplay, "fbneo:gamelist", nil
+}
+
+func loadFBNeoArcadeDisplayHints() (map[string]string, error) {
+	raw, err := readFBNeoGameListWithCache()
+	if err != nil {
+		return nil, err
+	}
+	display := parseFBNeoGameListDisplayNames(string(raw))
+	if len(display) == 0 {
+		return nil, errors.New("no FBNeo display names parsed")
+	}
+	return display, nil
+}
+
+func readFBNeoGameListWithCache() ([]byte, error) {
+	cacheFile := ""
+	if cacheDir, err := os.UserCacheDir(); err == nil {
+		cacheFile = filepath.Join(cacheDir, "retro-collection-tool", "fbneo-gamelist.txt")
+		if data, ok := readFreshCacheFile(cacheFile, fbneoCacheTTL); ok {
+			return data, nil
+		}
+	}
+
+	client := &http.Client{Timeout: gitHubAPIRequestTimeout}
+	req, err := http.NewRequest(http.MethodGet, fbneoGameListURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", nextUIUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		if cacheFile != "" {
+			if data, readErr := os.ReadFile(cacheFile); readErr == nil {
+				return data, nil
+			}
+		}
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		if cacheFile != "" {
+			if data, readErr := os.ReadFile(cacheFile); readErr == nil {
+				return data, nil
+			}
+		}
+		return nil, fmt.Errorf("fbneo gamelist returned HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if cacheFile != "" {
+		if err := os.MkdirAll(filepath.Dir(cacheFile), 0o755); err == nil {
+			_ = os.WriteFile(cacheFile, body, 0o644)
+		}
+	}
+
+	return body, nil
+}
+
+func readFreshCacheFile(path string, ttl time.Duration) ([]byte, bool) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return nil, false
+	}
+	if time.Since(info.ModTime()) > ttl {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+func parseFBNeoGameListDisplayNames(content string) map[string]string {
+	out := map[string]string{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || !strings.HasPrefix(line, "|") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 4 {
+			continue
+		}
+		name := normalizeArcadeROMKey(strings.TrimSpace(parts[1]))
+		fullName := normalizeArcadeDisplayName(strings.TrimSpace(parts[3]))
+		if name == "" || fullName == "" || strings.EqualFold(name, "name") {
+			continue
+		}
+		out[name] = fullName
+	}
+	return out
+}
+
+func preloadLibretroCheats(destination string, excludeSystems map[string]bool, g globalFlags) (int, error) {
+	systems, err := destinationSystemKeys(destination)
+	if err != nil {
+		return 0, err
+	}
+
+	availableDirs, err := loadLibretroCheatDirSet()
+	if err != nil {
+		emitInfo(g, "curated", "convert", "libretro cheats preload skipped", outputFields{"error": err.Error()})
+		return 0, nil
+	}
+
+	totalCopied := 0
+	for _, systemKey := range systems {
+		if excludeSystems[systemKey] {
+			continue
+		}
+		libretroDir, ok := resolveLibretroCheatDirForSystem(systemKey, availableDirs)
+		if !ok {
+			continue
+		}
+		copied, preloadErr := preloadLibretroSystemCheats(systemKey, libretroDir, destination, g)
+		if preloadErr != nil {
+			emitInfo(g, "curated", "convert", "libretro cheats preload skipped for system", outputFields{"system": systemKey, "error": preloadErr.Error()})
+			continue
+		}
+		totalCopied += copied
+	}
+
+	return totalCopied, nil
+}
+
+func loadLibretroCheatDirSet() (map[string]bool, error) {
+	entries, err := fetchGitHubContents(libretroDatabaseAPIBase)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if strings.EqualFold(entry.Type, "dir") {
+			out[entry.Name] = true
+		}
+	}
+	return out, nil
+}
+
+func resolveLibretroCheatDirForSystem(systemKey string, availableDirs map[string]bool) (string, bool) {
+	candidates, ok := nextUISystemToLibretroCheatDirCandidates[systemKey]
+	if !ok {
+		return "", false
+	}
+	for _, candidate := range candidates {
+		if availableDirs[candidate] {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func destinationSystemKeys(destination string) ([]string, error) {
+	romsRoot := filepath.Join(destination, "Roms")
+	entries, err := os.ReadDir(romsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	keys := make([]string, 0, len(entries))
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		systemKey := canonicalSystemKeyFromFolderName(entry.Name())
+		if systemKey == "" || seen[systemKey] {
+			continue
+		}
+		seen[systemKey] = true
+		keys = append(keys, systemKey)
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+func preloadLibretroSystemCheats(systemKey, libretroDir, destination string, g globalFlags) (int, error) {
+	entries, err := fetchGitHubContents(libretroDatabaseAPIBase + "/" + url.PathEscape(libretroDir))
+	if err != nil {
+		return 0, err
+	}
+
+	cheatsDstRoot := filepath.Join(destination, "Cheats", systemKey)
+	copied := 0
+	for _, entry := range entries {
+		if !strings.EqualFold(entry.Type, "file") {
+			continue
+		}
+		if !strings.EqualFold(filepath.Ext(entry.Name), ".cht") || strings.TrimSpace(entry.DownloadURL) == "" {
+			continue
+		}
+
+		dstPath := filepath.Join(cheatsDstRoot, entry.Name)
+		exists, statErr := fileExistsAt(dstPath)
+		if statErr != nil {
+			return copied, statErr
+		}
+		if exists {
+			continue
+		}
+
+		if g.dryRun {
+			emitVerbose(g, "curated", "convert", "dry-run libretro cheat preload", outputFields{"system": systemKey, "to": dstPath})
+			copied++
+			continue
+		}
+
+		if err := fsutil.EnsureDir(cheatsDstRoot); err != nil {
+			return copied, err
+		}
+
+		payload, dlErr := fetchGitHubRaw(entry.DownloadURL)
+		if dlErr != nil {
+			return copied, dlErr
+		}
+		if err := os.WriteFile(dstPath, payload, 0o644); err != nil {
+			return copied, err
+		}
+		copied++
+	}
+
+	return copied, nil
+}
+
+func fetchGitHubContents(apiURL string) ([]gitHubContentEntry, error) {
+	client := &http.Client{Timeout: gitHubAPIRequestTimeout}
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", nextUIUserAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned %d for %s", resp.StatusCode, apiURL)
+	}
+
+	var entries []gitHubContentEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func fetchGitHubRaw(rawURL string) ([]byte, error) {
+	client := &http.Client{Timeout: gitHubAPIRequestTimeout}
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", nextUIUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download returned HTTP %d for %s", resp.StatusCode, rawURL)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 func parseArcadeMapLine(line string) (filename string, label string) {

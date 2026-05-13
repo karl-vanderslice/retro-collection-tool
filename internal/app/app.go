@@ -1272,6 +1272,7 @@ Examples:
 	retro-collection-tool sync --systems snes,genesis
 	retro-collection-tool hacks --all-systems
 	retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
+	retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export --nextui-release none
 	retro-collection-tool bios --systems gba --strict
 	retro-collection-tool arcade dats update
 	retro-collection-tool arcade verify
@@ -1302,8 +1303,12 @@ Examples:
 	retro-collection-tool [global flags] curated convert --set done-set-3 --target nextui --source <path> --destination <path>
 
 Examples:
-	retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
-	retro-collection-tool --dry-run curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export`)
+		retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
+		retro-collection-tool --dry-run curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export
+		retro-collection-tool curated convert --set done-set-3 --target nextui --source /mnt/d/done\ set/final --destination /mnt/d/done\ set/export --nextui-release none
+
+	Notes:
+		By default, curated convert cleans the destination root, installs the latest NextUI release, and then rebuilds ROM/BIOS content.`)
 	case "bios":
 		fmt.Println(`Usage:
 	retro-collection-tool [global flags] bios --systems <slug-or-alias[,slug-or-alias...]> [--strict]

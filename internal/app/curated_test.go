@@ -352,6 +352,60 @@ func TestRunCuratedConvertValidatesRequiredFlags(t *testing.T) {
 	}
 }
 
+func TestResolveNextUIReleaseTag(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		tag  string
+		want bool
+	}{
+		{in: "latest", tag: "latest", want: true},
+		{in: "v6.10.0", tag: "v6.10.0", want: true},
+		{in: "", tag: "", want: false},
+		{in: "none", tag: "", want: false},
+		{in: "off", tag: "", want: false},
+		{in: "false", tag: "", want: false},
+		{in: "skip", tag: "", want: false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+			gotTag, ok := resolveNextUIReleaseTag(tc.in)
+			if ok != tc.want || gotTag != tc.tag {
+				t.Fatalf("resolveNextUIReleaseTag(%q) = (%q,%v), want (%q,%v)", tc.in, gotTag, ok, tc.tag, tc.want)
+			}
+		})
+	}
+}
+
+func TestPrepareCuratedDestinationRoot(t *testing.T) {
+	t.Parallel()
+
+	dst := filepath.Join(t.TempDir(), "export")
+	mustWriteFile(t, filepath.Join(dst, "stale", "old.txt"), "old")
+
+	if err := prepareCuratedDestinationRoot(dst, globalFlags{}); err != nil {
+		t.Fatalf("prepareCuratedDestinationRoot: %v", err)
+	}
+	assertFileMissing(t, filepath.Join(dst, "stale", "old.txt"))
+	if err := requireDir(dst); err != nil {
+		t.Fatalf("expected destination root to exist after prepare: %v", err)
+	}
+}
+
+func TestPrepareCuratedDestinationRootRejectsUnsafePaths(t *testing.T) {
+	t.Parallel()
+
+	for _, p := range []string{"", ".", string(filepath.Separator)} {
+		if err := prepareCuratedDestinationRoot(p, globalFlags{}); err == nil {
+			t.Fatalf("expected unsafe destination error for %q", p)
+		}
+	}
+}
+
 func TestContainsBoundedKeyword(t *testing.T) {
 	t.Parallel()
 
@@ -647,6 +701,44 @@ func TestParseArcadeMapLineSupportsTabAndPipe(t *testing.T) {
 	}
 }
 
+func TestNormalizeArcadeROMKey(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"3wonderu":         "3wonderu.zip",
+		"3wonderu.zip":     "3wonderu.zip",
+		"AliGatun.ZIP":     "aligatun.zip",
+		"":                 "",
+		"  ":               "",
+		"folder/mslug":     "mslug.zip",
+		"folder/mslug.zip": "mslug.zip",
+	}
+
+	for in, want := range cases {
+		if got := normalizeArcadeROMKey(in); got != want {
+			t.Fatalf("normalizeArcadeROMKey(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeArcadeDisplayName(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"Aliens (US, set 1)":               "Aliens",
+		"Alien vs. Predator (Euro 940520)": "Alien vs. Predator",
+		"Street Fighter II [bootleg]":      "Street Fighter II",
+		"Three Wonders":                    "Three Wonders",
+		"":                                 "",
+	}
+
+	for in, want := range cases {
+		if got := normalizeArcadeDisplayName(in); got != want {
+			t.Fatalf("normalizeArcadeDisplayName(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestCopyCuratedCheatsMapsSystems(t *testing.T) {
 	t.Parallel()
 
@@ -695,4 +787,72 @@ func TestCopySystemROMsArcadeFiltersByAllowedSet(t *testing.T) {
 
 	assertFileExists(t, filepath.Join(dst, "mslug.zip"))
 	assertFileMissing(t, filepath.Join(dst, "other.zip"))
+}
+
+func TestParseFBNeoGameListDisplayNames(t *testing.T) {
+	t.Parallel()
+
+	content := strings.Join([]string{
+		"This list contains all games supported by FinalBurn Neo.",
+		"| name                            | status | full name                                  | parent |",
+		"| mslug                           |        | Metal Slug                                 |        |",
+		"| sf2                             |        | Street Fighter II - The World Warrior      |        |",
+		"| aligatun                        |        | Aliens (US, set 1)                         |        |",
+		"+---------------------------------+--------+--------------------------------------------+--------+",
+	}, "\n")
+
+	got := parseFBNeoGameListDisplayNames(content)
+	if got["mslug.zip"] != "Metal Slug" {
+		t.Fatalf("expected mslug display name, got %q", got["mslug.zip"])
+	}
+	if got["sf2.zip"] != "Street Fighter II - The World Warrior" {
+		t.Fatalf("expected sf2 display name, got %q", got["sf2.zip"])
+	}
+	if got["aligatun.zip"] != "Aliens" {
+		t.Fatalf("expected aligatun display name to be cleaned, got %q", got["aligatun.zip"])
+	}
+}
+
+func TestDestinationSystemKeys(t *testing.T) {
+	t.Parallel()
+
+	dst := t.TempDir()
+	mustWriteFile(t, filepath.Join(dst, "Roms", "00) Arcade (FBN)", "mslug.zip"), "rom")
+	mustWriteFile(t, filepath.Join(dst, "Roms", "16) Game Boy Advance (GBA)", "game.gba"), "rom")
+	mustWriteFile(t, filepath.Join(dst, "Roms", "16) Game Boy Advance (GBA)", ".media", "game.png"), "art")
+
+	keys, err := destinationSystemKeys(dst)
+	if err != nil {
+		t.Fatalf("destinationSystemKeys: %v", err)
+	}
+
+	got := strings.Join(keys, ",")
+	if got != "ARCADE,GBA" {
+		t.Fatalf("unexpected keys %q", got)
+	}
+}
+
+func TestResolveLibretroCheatDirForSystem(t *testing.T) {
+	t.Parallel()
+
+	available := map[string]bool{
+		"FBNeo - Arcade Games": true,
+	}
+
+	got, ok := resolveLibretroCheatDirForSystem("ARCADE", available)
+	if !ok {
+		t.Fatal("expected ARCADE mapping to resolve")
+	}
+	if got != "FBNeo - Arcade Games" {
+		t.Fatalf("unexpected resolved dir %q", got)
+	}
+}
+
+func TestResolveLibretroCheatDirForSystemMissing(t *testing.T) {
+	t.Parallel()
+
+	available := map[string]bool{}
+	if got, ok := resolveLibretroCheatDirForSystem("COMMODORE", available); ok || got != "" {
+		t.Fatalf("expected unresolved mapping for COMMODORE, got ok=%v dir=%q", ok, got)
+	}
 }

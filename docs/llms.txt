@@ -1,0 +1,20 @@
+# retro-collection-tool
+
+> Production-oriented CLI wrapper around Igir for curated ROMM library workflows, including retail sync, hacks, BIOS import, arcade DAT handling, export, and bootstrap.
+
+Use the docs home first for operator context. Use configuration and commands for day-to-day work. Use architecture only when changing or reviewing implementation.
+
+## Core Docs
+
+- [Docs Home](./): Curated landing page for capabilities and task entrypoints.
+- [Configuration](./configuration/): Config layering, root selection, and the settings that shape library operations.
+- [Commands](./commands/): CLI flags, workflow entrypoints, and practical usage examples.
+- [RomVault Arcade Workflow](./workflow-romvault-arcade/): Process notes for arcade vault sorting and DAT-driven handling.
+
+## Contributor Docs
+
+- [Architecture](./architecture/): Internal module boundaries, execution flow, and where policy lives in the codebase.
+
+## Optional
+
+- [TODO](./todo/): Lower-priority backlog, rough ideas, and future work that is not needed for normal operation.
